@@ -55,21 +55,21 @@ def process_archive(query_args, args):
     функция принимает архив, проверяет, валидное ли у него название, имеет ли он верное расширение, потом сохраняет его в папку в %temp% и выполняет на нём process_archive_background, по endpoint'у возвращает начало работы над архивом
     функция также записывает в базу данных task и ставит его на обработку
     :param query_args: какой метод при обработке использовать: llm, copydetect, vector (нужные пишутся через пробел маленькими буквами)
-    :param args: словарь, одним из ключей которого - сам архив в bytes
+    :param args: сам архив в bytes
     :return: 202 response о том, что началась обработка архива
     """
     process_type: str = query_args["process_type"]
 
     if 'file' not in args:
-        abort(400, message="No file uploaded")
+        abort(400, message="архив не загружен")
 
     file = args['file']
     if file.filename == '':
-        abort(400, message="Empty filename")
+        abort(400, message="пустое имя архива")
 
     filename = secure_filename(file.filename)
     if not any(filename.lower().endswith(ext) for ext in current_app.config['ALLOWED_EXTENSIONS']):
-        abort(400, message="Invalid archive format")
+        abort(400, message="неверный формат архива")
 
     tempdir = tempfile.mkdtemp()
     filepath = os.path.join(tempdir, filename)
@@ -108,7 +108,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
     """
     methods = methods.split()
     if "copydetect" not in methods and "vector" not in methods and "llm" not in methods:
-        abort(400, message="вы выбрали неверный метод обработки архива")
+        abort(400, message="вы выбрали неверный метод обработки архива (выбирайте из 'vector copydetect llm'")
     with app.app_context():
         try:
             db.session.remove()
@@ -124,7 +124,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
             db.session.commit()
 
         except Exception as e:
-            current_app.logger.error(f"Processing failed: {str(e)}")
+            current_app.logger.error(f"ошибка обработки: {str(e)}")
             task = Task.query.get(task_id)
             task.status = "failed"
             task.results = json.dumps({"error": str(e)})
@@ -135,7 +135,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
                 os.remove(filepath)
                 os.rmdir(os.path.dirname(filepath))
             except Exception as cleanup_error:
-                current_app.logger.error(f"Cleanup failed: {cleanup_error}")
+                current_app.logger.error(f"не удалось очистить папки: {cleanup_error}")
 
 
 @blp.route("/status/<string:task_id>", methods=["GET"])  # /archives/status/<task_id>
@@ -143,7 +143,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
 def check_status(task_id):
     """
     функция нужна для получения данных обработки процессорами загруженного архива по созданному ранее id
-    :param task_id: полученный ранее id
+    :param task_id: полученный ранее id / ip клиента
     :return: словарь с задачей, её id, статусом и данными обработки
     """
     task = Task.query.get(task_id)
