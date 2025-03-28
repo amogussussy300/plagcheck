@@ -7,7 +7,7 @@ import os
 from extensions import db
 from processors import CopydetectProcessor, VectorProcessor, LlmProcessor
 from flask import current_app
-from schemas import ArchiveUploadSchema, ArchiveResponseSchema
+from schemas import ArchiveUploadSchema, ArchiveResponseSchema, ProcessArgsSchema
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 from models import Task
@@ -47,15 +47,18 @@ def convert_sets(obj):
 
 
 @blp.route("/", methods=["POST"])  # /archives/
+@blp.arguments(ProcessArgsSchema, location="query")  # archives/?process_type=...
 @blp.arguments(ArchiveUploadSchema, location="files")  # endpoint принимает аргумент (архив) в формате по схеме в schemas.py
 @blp.response(202, ArchiveResponseSchema)  # endpoint возвращает в формате по схеме в schemas.py
-def process_archive(args):
+def process_archive(query_args, args):
     """
     функция принимает архив, проверяет, валидное ли у него название, имеет ли он верное расширение, потом сохраняет его в папку в %temp% и выполняет на нём process_archive_background, по endpoint'у возвращает начало работы над архивом
     функция также записывает в базу данных task и ставит его на обработку
+    :param query_args: какой метод при обработке использовать: llm, copydetect, vector (нужные пишутся через пробел маленькими буквами)
     :param args: словарь, одним из ключей которого - сам архив в bytes
     :return: 202 response о том, что началась обработка архива
     """
+    process_type: str = query_args["process_type"]
 
     if 'file' not in args:
         abort(400, message="No file uploaded")
@@ -84,7 +87,8 @@ def process_archive(args):
         process_archive_background,
         app,
         filepath,
-        task_id
+        task_id,
+        process_type
     )
 
     return {
@@ -94,20 +98,24 @@ def process_archive(args):
     }, 202
 
 
-def process_archive_background(app, filepath, task_id):
+def process_archive_background(app, filepath, task_id, methods="copydetect vector llm"):
     """
     запускает проверку на плагиат для файлов архива и заполняет task в базе данных с нужным id
     :param app: объект текущего instance'а flask'а
     :param filepath: путь до архива
     :param task_id: случайно генерируемый id (см. process_archive)
+    :param methods: позволяет выбрать метод обработки архива
     """
+    methods = methods.split()
+    if "copydetect" not in methods and "vector" not in methods and "llm" not in methods:
+        abort(400, message="вы выбрали неверный метод обработки архива")
     with app.app_context():
         try:
             db.session.remove()
             results = {
-                "copydetect": convert_sets(CopydetectProcessor.process_archive(filepath)),
-                "vector": convert_sets(VectorProcessor.process_archive(filepath)),
-                "llm": convert_sets(LlmProcessor.process_archive(filepath))
+                "copydetect": convert_sets(CopydetectProcessor.process_archive(filepath)) if "copydetect" in methods else None,
+                "vector": convert_sets(VectorProcessor.process_archive(filepath)) if "vector" in methods else None,
+                "llm": convert_sets(LlmProcessor.process_archive(filepath)) if "llm" in methods else None
             }
 
             task = db.session.query(Task).get(task_id)

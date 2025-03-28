@@ -1,12 +1,12 @@
 from marshmallow import Schema, fields, ValidationError
-
+from flask import current_app
 
 def validate_archive(file):
     """
     фунцкия нужна для проверки соответствия формата архива
     :param file: получает значение fields.Raw из ArchiveUploadSchema
     """
-    allowed_extensions = {'.zip', '.rar'}
+    allowed_extensions = current_app.config.get('ALLOWED_EXTENSIONS')
     filename = file.filename.lower()
     if not any(filename.endswith(ext) for ext in allowed_extensions):
         raise ValidationError("допустимые форматы: '.zip', '.rar'")
@@ -30,3 +30,6 @@ class ArchiveResponseSchema(Schema):
     status = fields.String(required=True, description="статус обработки")
     message = fields.String(description="пояснение")
     results = fields.Dict(description="результат обработки", required=False)
+
+class ProcessArgsSchema(Schema):
+    process_type = fields.String(required=True, description="какой метод обработки использовать")
