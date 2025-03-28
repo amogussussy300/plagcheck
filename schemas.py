@@ -13,7 +13,7 @@ def validate_archive(file):
 
 class ArchiveUploadSchema(Schema):
     """
-    проверяет, передан ли файл, и если передан, то проверяет его расширение при помощи функции выше
+    нужен для стандартизации структуры апи; проверяет, передан ли файл, и если передан, то проверяет его расширение при помощи функции выше
     """
     file = fields.Raw(
         required=True,
@@ -32,4 +32,7 @@ class ArchiveResponseSchema(Schema):
     results = fields.Dict(description="результат обработки", required=False)
 
 class ProcessArgsSchema(Schema):
+    """
+    нужен для стандартизации структуры апи; получает метод обработки из запроса пользователя
+    """
     process_type = fields.String(required=True, description="какой метод обработки использовать")

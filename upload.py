@@ -147,7 +147,6 @@ def check_status(task_id):
     :return: словарь с задачей, её id, статусом и данными обработки
     """
     task = Task.query.get(task_id)
-    print(task)
     return {
         "task": task,
         "task_id": task.id,

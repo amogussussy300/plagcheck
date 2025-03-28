@@ -127,7 +127,6 @@ class VectorProcessor(BaseArchiveProcessor):
         :return: возвращает множество кортежей со значениями "похожести" пар указанных файлов
         """
 
-
         files = list(Path(extract_dir).rglob(f"*{extension}"))
         if not files:
             raise ValueError(f"файлов с данным расширением {extension} в папке {extract_dir} не было найдено")
