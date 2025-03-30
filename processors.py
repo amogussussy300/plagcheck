@@ -4,14 +4,15 @@ from abc import ABC, abstractmethod
 from tempfile import TemporaryDirectory
 from typing import Any
 from pathlib import Path
+import copydetect
 import rarfile
-from copydetect import CopyDetector
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from itertools import combinations
 from llm import get_llm_response
 import matplotlib
 matplotlib.use('Agg') # нужен чтобы избавиться от warning
+
 
 class BaseArchiveProcessor(ABC):
     """
@@ -81,29 +82,35 @@ class BaseArchiveProcessor(ABC):
 
 class CopydetectProcessor(BaseArchiveProcessor):
     """
-    процессор, использующий библиотеку copydetect
+    процессор, использующий библиотеку copydetect.
+    токенизирует код файла, сравнивает уникальные пары токенизированных кодов и имен их файлов, возвращает значения совпадения токенов, похожесть, а также предпологаемые части сплагиаченного кода (отмечены SUS_FROM_HERE--> <--TO_HERE)
     """
     @staticmethod
-    def _analyze_files(extract_dir: str, extension: str) -> str:
+    def _analyze_files(extract_dir: str, extension: str) -> dict:
         """
         :param extract_dir: указывается папка, куда распаковались файлы с кодом (заполняется автоматом, см. BaseArchiveProcessor)
         :param extension: указывается расширение файлов с кодом (заполняется автоматом, см. BaseArchiveProcessor)
-        :return возвращает репорт copydetect'а
+        :return возвращает словарь как результат обработки copydetect'а, где ключи - разделённые имена файлов, а значения - значения совпадения токенов, похожесть, а также сами коды с отмеченными частями предположительно сплагиаченного кода
         """
 
-        files = list(Path(extract_dir).rglob(f"*{extension}"))
+        report = {}
+
+        files = [
+            f for f in Path(extract_dir).iterdir()
+            if f.suffix == (extension if extension.startswith('.') else f'.{extension}')
+        ]
+
         if not files:
             raise ValueError(f"файлов с данным расширением {extension} в папке {extract_dir} не было найдено")
+        elif len(files) < 2:
+            raise ValueError(f"был найден только один файл с расширением {extension} в папке {extract_dir}")
 
-        detector = CopyDetector(
-            test_dirs=[extract_dir],
-            extensions=[extension],
-            display_t=0.5,
-            disable_filtering=True
-        )
-        detector.run()
-        report = detector.generate_html_report(output_mode="return")
-
+        fingerprints = [(file.name, copydetect.CodeFingerprint(file, 25, 1)) for file in files]
+        for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
+            token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
+            code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "SUS_FROM_HERE-->", "<--TO_HERE")
+            code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "SUS_FROM_HERE-->", "<--TO_HERE")
+            report[f"{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
         if not report:
             raise ValueError(f"возникла неожиданная ошибка: {report}")
         return report

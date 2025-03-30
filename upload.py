@@ -120,14 +120,14 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
 
             task = db.session.query(Task).get(task_id)
             task.status = "completed"
-            task.results = json.dumps(results)
+            task.results = json.dumps(results, indent=4, default=str)  # str чтобы не было object of type int64 is not json serializable
             db.session.commit()
 
         except Exception as e:
             current_app.logger.error(f"ошибка обработки: {str(e)}")
             task = Task.query.get(task_id)
             task.status = "failed"
-            task.results = json.dumps({"error": str(e)})
+            task.results = json.dumps({"error": str(e)}, indent=4)
             db.session.commit()
 
         finally:

@@ -17,11 +17,11 @@ def get_response(process_type: str, path2archive="sample.zip"):
     return json.loads(response.content)["task_id"]
 
 
-task_id = get_response("vector copydetect")
+task_id = get_response("copydetect vector")
 attempts = int(input("введите число попыток получения ответа от api: "))
 for i in range(attempts):
     print(f'{i + 1} attempt to respond')
     status_response = requests.get(f"http://localhost:5000/archives/status/{task_id}")
-    pprint.pprint(json.loads(status_response.content), compact=True)
+    pprint.pprint(json.loads(status_response.content))
     print('---------------\n')
-    time.sleep(3)
+    time.sleep(1.5)
