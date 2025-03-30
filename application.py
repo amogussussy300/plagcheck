@@ -1,4 +1,6 @@
 from flask import Flask
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_smorest import Api
 from flask_migrate import Migrate
 from extensions import db
@@ -27,11 +29,18 @@ app.config.from_mapping(
 )
 
 
-# инициализация sqlalchemy + api через smorest
+# создание объекта ограничителя по использованию api и его инициализация
+limiter = Limiter(
+    get_remote_address,
+    app=app,  # вот тут инициализируется
+    default_limits=["1 per 1 second"],
+    storage_uri="memory://"
+)
+
+# инициализация sqlalchemy + api через smorest + ограничителя
 migrate = Migrate(app, db)
 api = Api(app)
 db.init_app(app)
-
 
 # загрузка чертежа и его инициализация
 from upload import blp as upload_blp

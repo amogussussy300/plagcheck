@@ -4,6 +4,7 @@ import tempfile
 from flask_smorest import Blueprint, abort
 from werkzeug.utils import secure_filename
 import os
+from application import limiter
 from extensions import db
 from processors import CopydetectProcessor, VectorProcessor, LlmProcessor
 from flask import current_app
@@ -46,10 +47,12 @@ def convert_sets(obj):
     return obj
 
 
+
 @blp.route("/", methods=["POST"])  # /archives/
 @blp.arguments(ProcessArgsSchema, location="query")  # archives/?process_type=...
 @blp.arguments(ArchiveUploadSchema, location="files")  # endpoint принимает аргумент (архив) в формате по схеме в schemas.py
 @blp.response(202, ArchiveResponseSchema)  # endpoint возвращает в формате по схеме в schemas.py
+@limiter.limit("4 per minute")  # на пятый реквест в пределах минуты вернёт {'code': 429, 'status': 'Too Many Requests'}
 def process_archive(query_args, args):
     """
     функция принимает архив, проверяет, валидное ли у него название, имеет ли он верное расширение, потом сохраняет его в папку в %temp% и выполняет на нём process_archive_background, по endpoint'у возвращает начало работы над архивом
@@ -138,6 +141,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
                 current_app.logger.error(f"не удалось очистить папки: {cleanup_error}")
 
 
+@limiter.limit("1 per second")
 @blp.route("/status/<string:task_id>", methods=["GET"])  # /archives/status/<task_id>
 @blp.response(200, ArchiveResponseSchema)  # endpoint возвращает в формате по схеме в schemas.py
 def check_status(task_id):
