@@ -20,9 +20,9 @@ app.config.from_mapping(
     OPENAPI_URL_PREFIX="/",
     OPENAPI_SWAGGER_UI_PATH="/swagger-ui",
     OPENAPI_SWAGGER_UI_URL="https://cdn.jsdelivr.net/npm/swagger-ui-dist/",
-    ALLOWED_EXTENSIONS={'rar', 'zip'},
+    ALLOWED_EXTENSIONS={"rar", "zip", "tgz", "tar.gz"},
     MAX_CONTENT_LENGTH=100 * 2**20,  # 100 MB
-    SQLALCHEMY_DATABASE_URI='sqlite:///tasksdb.db',
+    SQLALCHEMY_DATABASE_URI="sqlite:///tasksdb.db",
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 

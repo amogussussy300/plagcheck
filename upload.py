@@ -143,7 +143,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
 def check_status(task_id):
     """
     функция нужна для получения данных обработки процессорами загруженного архива по созданному ранее id
-    :param task_id: полученный ранее id / ip клиента
+    :param task_id: полученный ранее id
     :return: словарь с задачей, её id, статусом и данными обработки
     """
     task = Task.query.get(task_id)

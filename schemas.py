@@ -9,7 +9,7 @@ def validate_archive(file):
     allowed_extensions = current_app.config.get('ALLOWED_EXTENSIONS')
     filename = file.filename.lower()
     if not any(filename.endswith(ext) for ext in allowed_extensions):
-        raise ValidationError("допустимые форматы: '.zip', '.rar'")
+        raise ValidationError(f"допустимые форматы: {", ".join(allowed_extensions)}")
 
 class ArchiveUploadSchema(Schema):
     """
@@ -19,7 +19,7 @@ class ArchiveUploadSchema(Schema):
         required=True,
         type="file",
         validate=validate_archive,
-        metadata={"description": "загрузить архив в формате '.zip', '.rar' с кодом "}
+        metadata={"description": "загрузить архив в формате '.zip', '.rar', '.tar.gz', '.tgz' с кодом "}
     )
 
 class ArchiveResponseSchema(Schema):

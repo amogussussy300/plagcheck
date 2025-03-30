@@ -1,5 +1,6 @@
 import re
 import zipfile
+import tarfile
 from abc import ABC, abstractmethod
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -38,20 +39,23 @@ class BaseArchiveProcessor(ABC):
     @staticmethod
     def _common_extraction(archive_path: str, extract_dir: str) -> None:
         """
-        :param archive_path: указывается путь до архива с файлами с кодом (поддерживаемые форматы архива: .zip и .rar)
+        :param archive_path: указывается путь до архива с файлами с кодом (поддерживаемые форматы архива: .zip, .rar, .tar.gz, .tgz)
         :param extract_dir: указывается путь до папки, куда распаковывается содержимое архива (путь будет заполняться автоматом до папки, создаваемой в %temp%)
         метод распаковывает архив в определённой папке (см. метод класса process_archive)
         """
 
         archive_path = Path(archive_path)
         suffix = archive_path.suffix.lower()
-
+        main_suffix = "".join(archive_path.suffixes[-2:]).lower()
         try:
             if suffix == ".zip":
                 with zipfile.ZipFile(archive_path, "r") as archive:
                     archive.extractall(extract_dir)
             elif suffix == ".rar":
                 with rarfile.RarFile(archive_path, "r") as archive:
+                    archive.extractall(extract_dir)
+            elif main_suffix == ".tar.gz" or main_suffix == ".tgz":
+                with tarfile.TarFile(archive_path, "r") as archive:
                     archive.extractall(extract_dir)
             else:
                 raise ValueError(f"формат {suffix} архива не поддерживается")
