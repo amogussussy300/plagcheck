@@ -20,4 +20,10 @@ git subtree pull --prefix=api . api
 ```
 
 > **примечание**  
+> на винде с powershell нет сепаратора &&, поэтому вместо ```git add . && git commit -m "api update"```: 
+> 
+> 1)```git add .``` 
+> 2)```git commit -m "api update"```
+> 
+> 
 > если изменения не применились, то надо проверь запушились ли коммиты: ctrl + shift + k
