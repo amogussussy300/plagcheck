@@ -6,6 +6,7 @@
 ```
 git clone https://github.com/amogussussy300/plagcheck.git
 cd plagcheck
+git checkout api -f
 ```
 
 ### 2. установить зависимости

@@ -1,0 +1,30 @@
+Index: EXAMPLE.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>#\r\n#\r\n#\r\n#\r\n# этот .py файл не относится к проекту и нужен просто для примера показа работы api\r\n\r\n\r\nimport time\r\nimport requests\r\nimport json\r\nimport pprint\r\n\r\n\r\ndef get_response(process_type: str, path2archive=\"sample.zip\"):\r\n    response = requests.post(\"http://localhost:5000/archives/\", files={\"file\": open(path2archive, \"rb\")}, params={\"process_type\": process_type})\r\n    print(json.loads(response.content)[\"task_id\"])\r\n    return json.loads(response.content)[\"task_id\"]\r\n\r\n\r\ntask_id = get_response(\"vector copydetect\")\r\nattempts = int(input(\"введите число попыток получения ответа от api: \"))\r\nfor i in range(attempts):\r\n    print(f'{i + 1} attempt to respond')\r\n    status_response = requests.get(f\"http://localhost:5000/archives/status/{task_id}\")\r\n    pprint.pprint(json.loads(status_response.content), compact=True)\r\n    print('---------------\\n')\r\n    time.sleep(3)
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/EXAMPLE.py b/EXAMPLE.py
+--- a/EXAMPLE.py	(revision a1531f5c9b4c4a969cc2b4e2d9968b8ad84f0215)
++++ b/EXAMPLE.py	(date 1743141402138)
+@@ -17,11 +17,14 @@
+     return json.loads(response.content)["task_id"]
+ 
+ 
+-task_id = get_response("vector copydetect")
++# task_id = get_response("vector copydetect")
+ attempts = int(input("введите число попыток получения ответа от api: "))
+ for i in range(attempts):
+     print(f'{i + 1} attempt to respond')
+-    status_response = requests.get(f"http://localhost:5000/archives/status/{task_id}")
++    status_response = requests.get(f"http://localhost:5000/archives/status/{'ec2d3af3-0ba7-4bd8-ad1e-731d94f113a9'}")
+     pprint.pprint(json.loads(status_response.content), compact=True)
+     print('---------------\n')
+-    time.sleep(3)
+\ No newline at end of file
++    time.sleep(3)
++
++
++print(json.loads(status_response.content)["results"]["copydetect"])
+\ No newline at end of file
