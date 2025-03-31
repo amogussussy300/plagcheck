@@ -5,7 +5,8 @@
 ### 1. клонировать
 ```
 git clone https://github.com/amogussussy300/plagcheck.git
-git checkout api 
+cd plagcheck
+git checkout api
 ```
 
 ### 2. установить зависимости
