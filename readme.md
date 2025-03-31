@@ -18,3 +18,6 @@ git push origin api      # переносим изменённый проект 
 git checkout master
 git subtree pull --prefix=api . api
 ```
+
+> **примечание**  
+> если изменения не применились, то надо проверь запушились ли коммиты: ctrl + shift + k
