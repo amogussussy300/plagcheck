@@ -1,0 +1,26 @@
+Index: EXAMPLE.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>#\r\n#\r\n#\r\n#\r\n# этот .py файл не относится к проекту и нужен просто для примера показа работы api\r\n\r\n\r\nimport time\r\nimport requests\r\nimport json\r\nimport pprint\r\n\r\n\r\ndef get_response(process_type: str, path2archive=\"sample.zip\"):\r\n    response = requests.post(\"http://localhost:5000/archives/\", files={\"file\": open(path2archive, \"rb\")}, params={\"process_type\": process_type})\r\n    print(json.loads(response.content))\r\n    return json.loads(response.content)[\"task_id\"]\r\n\r\ntask_id = get_response(\"copydetect vector\")\r\nprint(task_id)\r\n\r\nattempts = int(input(\"введите число попыток получения ответа от api: \"))\r\nfor i in range(attempts):\r\n    print(f'{i + 1} attempt to respond')\r\n    status_response = requests.get(f\"http://localhost:5000/archives/status/{task_id}\")\r\n    pprint.pprint(json.loads(status_response.content))\r\n    print('---------------\\n')\r\n    time.sleep(1.5)
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/EXAMPLE.py b/EXAMPLE.py
+--- a/EXAMPLE.py	(revision 44165e18cfcd604b7734c30f7c0a5cd44cfb1889)
++++ b/EXAMPLE.py	(date 1743356567099)
+@@ -3,8 +3,6 @@
+ #
+ #
+ # этот .py файл не относится к проекту и нужен просто для примера показа работы api
+-
+-
+ import time
+ import requests
+ import json
+@@ -25,4 +23,4 @@
+     status_response = requests.get(f"http://localhost:5000/archives/status/{task_id}")
+     pprint.pprint(json.loads(status_response.content))
+     print('---------------\n')
+-    time.sleep(1.5)
+\ No newline at end of file
++    time.sleep(1.5)
