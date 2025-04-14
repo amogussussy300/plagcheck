@@ -61,7 +61,7 @@ class BaseArchiveProcessor(ABC):
 
                 dir_part, file_part = parts
 
-                student_name = dir_part.split('-', 1)[0]
+                student_name = "-".join(dir_part.split('-', dir_part.count('-'))[:dir_part.count('-')])
                 name_parts = student_name.split()
                 surname = name_parts[0] if len(name_parts) >= 1 else "Unknown"
                 name = name_parts[1] if len(name_parts) >= 2 else "Unknown"
