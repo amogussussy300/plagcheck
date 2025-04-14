@@ -1,7 +1,9 @@
+import os
 import re
 import zipfile
 import tarfile
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from tempfile import TemporaryDirectory
 from typing import Any
 from pathlib import Path
@@ -10,7 +12,6 @@ import rarfile
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from itertools import combinations
-from llm import get_llm_response
 import matplotlib
 matplotlib.use('Agg') # нужен чтобы избавиться от warning
 
@@ -20,14 +21,14 @@ class BaseArchiveProcessor(ABC):
     класс базового процессора, от которого будут наследоваться другие
     """
     @staticmethod
-    def _read_file(file: str, strip=True) -> str:
+    def _read_file(file: str, strip=True, encoding="utf-8") -> str:
         """
         нужна для чтения и обработки получаемых файлов с кодом
         :param file: путь до файла с кодом
         :param strip: определяет, будут ли форматироваться получаемые файлы
         :return: возвращает код файла строкой
         """
-        with open(file) as f:
+        with open(file, encoding=encoding) as f:
             text = f.read()
             text = re.sub(r'#.*', '', text, flags=re.MULTILINE)
             text = re.sub(r'[ \t]+', ' ', text)
@@ -37,49 +38,112 @@ class BaseArchiveProcessor(ABC):
             return '\n'.join(lines)
 
     @staticmethod
-    def _common_extraction(archive_path: str, extract_dir: str) -> None:
+    def _common_extraction(archive_path: str, extract_dir: str) -> dict:
         """
         :param archive_path: указывается путь до архива с файлами с кодом (поддерживаемые форматы архива: .zip, .rar, .tar.gz, .tgz)
         :param extract_dir: указывается путь до папки, куда распаковывается содержимое архива (путь будет заполняться автоматом до папки, создаваемой в %temp%)
-        метод распаковывает архив в определённой папке (см. метод класса process_archive)
+        метод распаковывает архив по решениям определённых задач и распределяет по расширениям решения
+
+        данные решений:
+        {'A': {'cpp': ['C:\\...\\A_solutions\\cpp_solutions\\A-Unknown_idas-OK.cpp', ... ]}}
+
+        :return метод возвращает словарь с данными решений
         """
+
+        def _extract(arc: zipfile.ZipFile | tarfile.TarFile | rarfile.RarFile):
+            for file_info in archive.infolist():
+                if "-OK" not in file_info.filename:
+                    continue
+
+                parts = file_info.filename.split('/')
+                if len(parts) != 2:
+                    continue
+
+                dir_part, file_part = parts
+
+                student_name = dir_part.split('-', 1)[0]
+                name_parts = student_name.split()
+                surname = name_parts[0] if len(name_parts) >= 1 else "Unknown"
+                name = name_parts[1] if len(name_parts) >= 2 else "Unknown"
+
+                letter = file_part[0]
+                file_path = Path(file_part)
+
+                extension = file_path.suffix
+                if not extension:
+                    extension = '.txt'
+                    extension_clean = 'txt'
+                else:
+                    extension_clean = extension.lstrip('.')
+
+                new_filename = f"{letter}-{name}_{surname}-OK{extension}"
+
+                target_dir = os.path.join(
+                    extract_dir,
+                    f"{letter}_solutions",
+                    f"{extension_clean}_solutions"
+                )
+                os.makedirs(target_dir, exist_ok=True)
+
+                target_path = os.path.join(target_dir, new_filename)
+                with archive.open(file_info) as source, open(target_path, 'wb') as target:
+                    target.write(source.read())
+
+            target.close()
 
         archive_path = Path(archive_path)
         suffix = archive_path.suffix.lower()
         main_suffix = "".join(archive_path.suffixes[-2:]).lower()
+
         try:
             if suffix == ".zip":
                 with zipfile.ZipFile(archive_path, "r") as archive:
-                    archive.extractall(extract_dir)
+                    _extract(archive)
             elif suffix == ".rar":
                 with rarfile.RarFile(archive_path, "r") as archive:
-                    archive.extractall(extract_dir)
+                    _extract(archive)
             elif main_suffix == ".tar.gz" or main_suffix == ".tgz":
                 with tarfile.TarFile(archive_path, "r") as archive:
-                    archive.extractall(extract_dir)
+                    _extract(archive)
             else:
                 raise ValueError(f"формат {suffix} архива не поддерживается")
         except (zipfile.BadZipFile, rarfile.BadRarFile) as e:
             raise ValueError(f"неверный архив (повреждённый): {str(e)}")
 
+        solutions = {}
+        extract_path = Path(extract_dir)
+
+        for letter_dir in extract_path.iterdir():
+            if letter_dir.is_dir() and letter_dir.name.endswith('_solutions'):
+                letter = letter_dir.name[0].upper()
+                extensions_dict = defaultdict(list)
+
+                for file_path in letter_dir.rglob('*'):
+                    if file_path.is_file():
+                        extension = file_path.suffix[1:] if file_path.suffix else 'none'
+                        extensions_dict[extension].append(str(file_path.resolve()))
+
+                solutions[letter] = dict(extensions_dict)
+
+        return solutions
+
     @classmethod
-    def process_archive(cls, archive_path: str, extension=".py") -> Any:
+    def process_archive(cls, archive_path: str) -> Any:
         """
         :param archive_path: указывается путь до архива
-        :param extension: указывается расширение файлов с кодом в архиве, дефолтно .py
         :return: возвращает результат анализа на плагиат (поскольку это базовый класс, то в данном случае ничего не будет возвращаться, см. наследников)
         """
         with TemporaryDirectory() as extract_dir:
             try:
-                cls._common_extraction(archive_path, extract_dir)
+                data = cls._common_extraction(archive_path, extract_dir)
             except (zipfile.BadZipFile, rarfile.BadRarFile) as e:
                 raise ValueError(f"неверный архив (повреждённый): {str(e)}")
 
-            return cls._analyze_files(extract_dir, extension)
+            return cls.analyze_files(data)
 
     @staticmethod
     @abstractmethod
-    def _analyze_files(extract_dir: str, extension: str) -> None:
+    def analyze_files(data: dict) -> Any:
         """метод будет определён в наследующихся процессорах"""
         pass
 
@@ -90,31 +154,21 @@ class CopydetectProcessor(BaseArchiveProcessor):
     токенизирует код файла, сравнивает уникальные пары токенизированных кодов и имен их файлов, возвращает значения совпадения токенов, похожесть, а также предпологаемые части сплагиаченного кода (отмечены SUS_FROM_HERE--> <--TO_HERE)
     """
     @staticmethod
-    def _analyze_files(extract_dir: str, extension: str) -> dict:
+    def analyze_files(data: dict) -> dict:
         """
-        :param extract_dir: указывается папка, куда распаковались файлы с кодом (заполняется автоматом, см. BaseArchiveProcessor)
-        :param extension: указывается расширение файлов с кодом (заполняется автоматом, см. BaseArchiveProcessor)
+        :param data: указывается словарь с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return возвращает словарь как результат обработки copydetect'а, где ключи - разделённые имена файлов, а значения - значения совпадения токенов, похожесть, а также сами коды с отмеченными частями предположительно сплагиаченного кода
         """
-
         report = {}
 
-        files = [
-            f for f in Path(extract_dir).iterdir()
-            if f.suffix == (extension if extension.startswith('.') else f'.{extension}')
-        ]
-
-        if not files:
-            raise ValueError(f"файлов с данным расширением {extension} в папке {extract_dir} не было найдено")
-        elif len(files) < 2:
-            raise ValueError(f"был найден только один файл с расширением {extension} в папке {extract_dir}")
-
-        fingerprints = [(file.name, copydetect.CodeFingerprint(file, 25, 1)) for file in files]
-        for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
-            token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
-            code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "SUS_FROM_HERE-->", "<--TO_HERE")
-            code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "SUS_FROM_HERE-->", "<--TO_HERE")
-            report[f"{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
+        for letter in data:
+            for extension in data[letter]:
+                fingerprints = [(Path(file).name, copydetect.CodeFingerprint(file, 25, 1)) for file in data[letter][extension]]
+                for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
+                    token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
+                    code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
+                    code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
+                    report[f"{letter}___{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
         if not report:
             raise ValueError(f"возникла неожиданная ошибка: {report}")
         return report
@@ -126,27 +180,33 @@ class VectorProcessor(BaseArchiveProcessor):
     кратко, этот процессор рассчитывает TF-IDF векторы для каждого файла с кодом и сравнивает их направленность
     (косинусное сходство).
     если файлы идентичны, то векторы также направлены одинаково, а значит функция
-    cosine_similarity вернёт 1 (см. статический метод _find_plagiarism).
+    cosine_similarity вернёт 1 (см. static method _find_plagiarism).
     если файлы совершенно не схожи, то cosine_similarity вернёт 0.
     """
 
     @staticmethod
-    def _analyze_files(extract_dir: str, extension: str) -> set[tuple]:
+    def analyze_files(data: dict) -> dict:
         """
-        :param extract_dir: указывается папка, куда распаковались файлы с кодом (заполняется автоматом, см. BaseArchiveProcessor)
-        :param extension: указывается расширение файлов с кодом (заполняется автоматом, см. BaseArchiveProcessor)
+        :param data: указывается словарь с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return: возвращает множество кортежей со значениями "похожести" пар указанных файлов
         """
+        result = {}
+        for letter, extensions in data.items():
+            for ext, files in extensions.items():
+                filenames = [Path(fp).name for fp in files]
+                docs = [VectorProcessor._read_file(fp) for fp in files]
 
-        files = list(Path(extract_dir).rglob(f"*{extension}"))
-        if not files:
-            raise ValueError(f"файлов с данным расширением {extension} в папке {extract_dir} не было найдено")
+                if not docs:
+                    continue
 
-        docs = [VectorProcessor._read_file(file) for file in files]
-        transformed_docs = TfidfVectorizer().fit_transform(docs).toarray()
-        doc_pairs = list(zip([path.name for path in files], transformed_docs))
+                tfidf_matrix = TfidfVectorizer().fit_transform(docs).toarray()
 
-        return VectorProcessor._find_plagiarism(doc_pairs)
+                doc_pairs = list(zip(filenames, tfidf_matrix))
+
+                result[f"{letter}___{ext}"] = VectorProcessor._find_plagiarism(doc_pairs)
+
+        return result
+
 
     @staticmethod
     def _find_plagiarism(pairs: list[tuple]) -> set[tuple]:
@@ -164,39 +224,3 @@ class VectorProcessor(BaseArchiveProcessor):
             results.add((sorted_files[0], sorted_files[1], similarity))
 
         return results
-
-
-class LlmProcessor(BaseArchiveProcessor):
-    """
-    процессор, использующий локально запущенную большую языковую модель deepseek-r1
-    """
-    @staticmethod
-    def _analyze_files(extract_dir: str, extension: str) -> str:
-        """
-        :param extract_dir: указывается папка, куда распаковались файлы с кодом (заполняется автоматом, см. BaseArchiveProcessor)
-        :param extension: указывается расширение файлов с кодом (заполняется автоматом, см. BaseArchiveProcessor)
-        :return: возвращает ответ от нейросети
-        """
-        files = list(Path(extract_dir).rglob(f"*{extension}"))
-        if not files:
-            raise ValueError(f"файлов с данным расширением {extension} в папке {extract_dir} не было найдено")
-
-        data = [(file.name, VectorProcessor._read_file(file, strip=False)) for file in files]
-        prompt = f"""
-        Analyze the following Python codes for potential plagiarism. Compare each pair of files and provide:
-        A similarity score from 1-10 (10 = highly likely plagiarized)
-        A concise reason focusing on variable/function naming, structural patterns, algorithm logic, and unique code overlaps.
-        Data:
-        {data}
-        
-        Respond strictly in this format (without any additional clarifications, "final answers" etc.):
-        ```
-        LLM:  
-        1) Files (X.py and Y.py). Similarity score: N/10. Reason: [Concise 1-2-sentence explanation].  
-        2) Files (X.py and Y.py). Similarity score: N/10. Reason: [...]  
-        3) Files (X.py and Y.py). Similarity score: N/10. Reason: [...]  
-        ...
-        
-        ```
-        """
-        return (get_llm_response(prompt).split('</think>'))[1]
