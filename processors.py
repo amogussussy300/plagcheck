@@ -14,6 +14,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from itertools import combinations
 import matplotlib
 import logging
+from check_archive import check_archive
 matplotlib.use('Agg') # нужен чтобы избавиться от warning
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class BaseArchiveProcessor(ABC):
             return '\n'.join(lines)
 
     @staticmethod
-    def _common_extraction(archive_path: str, extract_dir: str) -> dict:
+    def _common_extraction(archive_path: str, extract_dir: str) -> dict | list:
         """
         :param archive_path: указывается путь до архива с файлами с кодом (поддерживаемые форматы архива: .zip, .rar, .tar.gz, .tgz)
         :param extract_dir: указывается путь до папки, куда распаковывается содержимое архива (путь будет заполняться автоматом до папки, создаваемой в %temp%)
@@ -54,6 +55,7 @@ class BaseArchiveProcessor(ABC):
         """
 
         def _extract(arc: zipfile.ZipFile | tarfile.TarFile | rarfile.RarFile):
+
             for file_info in archive.infolist():
                 if "-OK" not in file_info.filename:
                     continue
@@ -97,37 +99,53 @@ class BaseArchiveProcessor(ABC):
         archive_path = Path(archive_path)
         suffix = archive_path.suffix.lower()
         main_suffix = "".join(archive_path.suffixes[-2:]).lower()
-
         try:
             if suffix == ".zip":
                 with zipfile.ZipFile(archive_path, "r") as archive:
-                    _extract(archive)
+                    checked = check_archive(archive)
+                    if checked:
+                        _extract(archive)
+                    else:
+                        archive.extractall(extract_dir)
             elif suffix == ".rar":
                 with rarfile.RarFile(archive_path, "r") as archive:
-                    _extract(archive)
+                    checked = check_archive(archive)
+                    if checked:
+                        _extract(archive)
+                    else:
+                        archive.extractall(extract_dir)
             elif main_suffix == ".tar.gz" or main_suffix == ".tgz":
                 with tarfile.TarFile(archive_path, "r") as archive:
-                    _extract(archive)
+                    checked = check_archive(archive)
+                    if checked:
+                        _extract(archive)
+                    else:
+                        archive.extractall(extract_dir)
             else:
                 raise ValueError(f"формат {suffix} архива не поддерживается")
         except (zipfile.BadZipFile, rarfile.BadRarFile) as e:
             raise ValueError(f"неверный архив (повреждённый): {str(e)}")
 
+
         solutions = {}
-        extract_path = Path(extract_dir)
+        if checked:
+            extract_path = Path(extract_dir)
 
-        for letter_dir in extract_path.iterdir():
-            if letter_dir.is_dir() and letter_dir.name.endswith('_solutions'):
-                letter = letter_dir.name[0].upper()
-                extensions_dict = defaultdict(list)
+            for letter_dir in extract_path.iterdir():
+                if letter_dir.is_dir() and letter_dir.name.endswith('_solutions'):
+                    letter = letter_dir.name[0].upper()
+                    extensions_dict = defaultdict(list)
 
-                for file_path in letter_dir.rglob('*'):
-                    if file_path.is_file():
-                        extension = file_path.suffix[1:] if file_path.suffix else 'none'
-                        extensions_dict[extension].append(str(file_path.resolve()))
+                    for file_path in letter_dir.rglob('*'):
+                        if file_path.is_file():
+                            extension = file_path.suffix[1:] if file_path.suffix else 'none'
+                            extensions_dict[extension].append(str(file_path.resolve()))
 
-                solutions[letter] = dict(extensions_dict)
-
+                    solutions[letter] = dict(extensions_dict)
+        else:
+            solutions = [
+                f for f in Path(extract_dir).iterdir()
+            ]
         return solutions
 
     @classmethod
@@ -146,7 +164,7 @@ class BaseArchiveProcessor(ABC):
 
     @staticmethod
     @abstractmethod
-    def analyze_files(data: dict) -> Any:
+    def analyze_files(data: dict | list) -> Any:
         """метод будет определён в наследующихся процессорах"""
         pass
 
@@ -157,23 +175,33 @@ class CopydetectProcessor(BaseArchiveProcessor):
     токенизирует код файла, сравнивает уникальные пары токенизированных кодов и имен их файлов, возвращает значения совпадения токенов, похожесть, а также предпологаемые части сплагиаченного кода (отмечены SUS_FROM_HERE--> <--TO_HERE)
     """
     @staticmethod
-    def analyze_files(data: dict) -> dict:
+    def analyze_files(data: dict | list) -> dict:
         """
-        :param data: указывается словарь с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
+        :param data: указывается словарь/список с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return возвращает словарь как результат обработки copydetect'а, где ключи - разделённые имена файлов, а значения - значения совпадения токенов, похожесть, а также сами коды с отмеченными частями предположительно сплагиаченного кода
         """
         report = {}
 
-        for letter in data:
-            for extension in data[letter]:
-                fingerprints = [(Path(file).name, copydetect.CodeFingerprint(file, 25, 1)) for file in data[letter][extension]]
-                for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
-                    token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
-                    code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
-                    code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
-                    report[f"{letter}___{extension}___{name1}___{name2}"] = (token_overlap, sum(similarities) / len(similarities), (code1, code2))
-        if not report:
-            raise ValueError(f"возникла неожиданная ошибка: {report}")
+        if isinstance(data, dict):
+            for letter in data:
+                for extension in data[letter]:
+                    fingerprints = [(Path(file).name, copydetect.CodeFingerprint(file, 25, 1)) for file in data[letter][extension]]
+                    for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
+                        token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
+                        code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
+                        code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
+                        report[f"{letter}___{extension}___{name1}___{name2}"] = (token_overlap, sum(similarities) / len(similarities), (code1, code2))
+            if not report:
+                raise ValueError(f"возникла неожиданная ошибка: {report}")
+        else:
+            fingerprints = [(file.name, copydetect.CodeFingerprint(file, 25, 1)) for file in data]
+            for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
+                token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
+                code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
+                code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
+                report[f"{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
+            if not report:
+                raise ValueError(f"возникла неожиданная ошибка: {report}")
         return report
 
 
@@ -188,28 +216,35 @@ class VectorProcessor(BaseArchiveProcessor):
     """
 
     @staticmethod
-    def analyze_files(data: dict) -> dict:
+    def analyze_files(data: dict | list) -> dict | set[tuple]:
         """
-        :param data: указывается словарь с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
+        :param data: указывается словарь/список с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return: возвращает множество кортежей со значениями "похожести" пар указанных файлов
         """
         result = {}
-        for letter, extensions in data.items():
-            for ext, files in extensions.items():
-                filenames = [Path(fp).name for fp in files]
-                docs = [VectorProcessor._read_file(fp) for fp in files]
 
-                if not docs:
-                    continue
+        if isinstance(data, dict):
+            for letter, extensions in data.items():
+                for ext, files in extensions.items():
+                    filenames = [Path(fp).name for fp in files]
+                    docs = [VectorProcessor._read_file(fp) for fp in files]
 
-                tfidf_matrix = TfidfVectorizer().fit_transform(docs).toarray()
+                    if not docs:
+                        continue
 
-                doc_pairs = list(zip(filenames, tfidf_matrix))
+                    tfidf_matrix = TfidfVectorizer().fit_transform(docs).toarray()
 
-                r = list(VectorProcessor._find_plagiarism(doc_pairs))
+                    doc_pairs = list(zip(filenames, tfidf_matrix))
 
-                for file in r:
-                    result[f"{letter}___{ext}___{file[0]}___{file[1]}"] = file[2]
+                    r = list(VectorProcessor._find_plagiarism(doc_pairs))
+
+                    for file in r:
+                        result[f"{letter}___{ext}___{file[0]}___{file[1]}"] = file[2]
+        else:
+            docs = [VectorProcessor._read_file(file) for file in data]
+            transformed_docs = TfidfVectorizer().fit_transform(docs).toarray()
+            doc_pairs = list(zip([path.name for path in data], transformed_docs))
+            result = VectorProcessor._find_plagiarism(doc_pairs)
 
         return result
 
