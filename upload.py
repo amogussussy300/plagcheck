@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 # есть способ как сделать эффективнее синхронный подход - это использовать специальные wsg интерфейсы (web service gateway interface) как waitress (что я и использую) или gunicorn (работающий только на linux). что самое главное, эти интерфейсы дают возможность выставляет определённое чилсо worker'ов, что позволяет обойти ограничение фласка в один поток и немного приблизиться к эффективности асинхронного fastapi
 executor = ThreadPoolExecutor()
 
-# чертеж, при этом путь выглядит так: доменноеимя:порт/archives/
+# чертеж, при этом путь выглядит так: доменноеимя:порт/api/
 blp = Blueprint(
     "archive_processor",
     __name__,
-    url_prefix="/archives",
+    url_prefix="/api/",
     description="проверка архивов с кодом на плагиат"
 )
 
@@ -48,7 +48,7 @@ def convert_sets(obj):
 
 
 
-@blp.route("/", methods=["POST"])  # /archives/
+@blp.route("/archives/", methods=["POST"])  # api/archives/
 @blp.arguments(ProcessArgsSchema, location="query")  # archives/?process_type=...
 @blp.arguments(ArchiveUploadSchema, location="files")  # endpoint принимает аргумент (архив) в формате по схеме в schemas.py
 @blp.response(202, ArchiveResponseSchema)  # endpoint возвращает в формате по схеме в schemas.py
@@ -141,7 +141,7 @@ def process_archive_background(app, filepath, task_id, methods="copydetect vecto
 
 
 @limiter.limit("1 per second")
-@blp.route("/status/<string:task_id>", methods=["GET"])  # /archives/status/<task_id>
+@blp.route("/status/<string:task_id>", methods=["GET"])  # api/status/<task_id>
 @blp.response(200, ArchiveResponseSchema)  # endpoint возвращает в формате по схеме в schemas.py
 def check_status(task_id):
     """

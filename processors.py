@@ -13,7 +13,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from itertools import combinations
 import matplotlib
+import logging
 matplotlib.use('Agg') # нужен чтобы избавиться от warning
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class BaseArchiveProcessor(ABC):
@@ -168,7 +171,7 @@ class CopydetectProcessor(BaseArchiveProcessor):
                     token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
                     code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
                     code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
-                    report[f"{letter}___{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
+                    report[f"{letter}___{extension}___{name1}___{name2}"] = (token_overlap, sum(similarities) / len(similarities), (code1, code2))
         if not report:
             raise ValueError(f"возникла неожиданная ошибка: {report}")
         return report
@@ -203,7 +206,10 @@ class VectorProcessor(BaseArchiveProcessor):
 
                 doc_pairs = list(zip(filenames, tfidf_matrix))
 
-                result[f"{letter}___{ext}"] = VectorProcessor._find_plagiarism(doc_pairs)
+                r = list(VectorProcessor._find_plagiarism(doc_pairs))
+
+                for file in r:
+                    result[f"{letter}___{ext}___{file[0]}___{file[1]}"] = file[2]
 
         return result
 
