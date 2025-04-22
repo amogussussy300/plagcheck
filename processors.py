@@ -42,16 +42,16 @@ class BaseArchiveProcessor(ABC):
             return '\n'.join(lines)
 
     @staticmethod
-    def _common_extraction(archive_path: str, extract_dir: str) -> dict | list:
+    def common_extraction(archive_path: str, extract_dir: str) -> tuple[dict, bool]:
         """
         :param archive_path: указывается путь до архива с файлами с кодом (поддерживаемые форматы архива: .zip, .rar, .tar.gz, .tgz)
         :param extract_dir: указывается путь до папки, куда распаковывается содержимое архива (путь будет заполняться автоматом до папки, создаваемой в %temp%)
         метод распаковывает архив по решениям определённых задач и распределяет по расширениям решения
 
-        данные решений:
+        данные решений (если архив из контеста):
         {'A': {'cpp': ['C:\\...\\A_solutions\\cpp_solutions\\A-Unknown_idas-OK.cpp', ... ]}}
 
-        :return метод возвращает словарь с данными решений
+        :return метод возвращает словарь с данными решений и True если архив из контеста
         """
 
         def _extract(arc: zipfile.ZipFile | tarfile.TarFile | rarfile.RarFile):
@@ -143,10 +143,18 @@ class BaseArchiveProcessor(ABC):
 
                     solutions[letter] = dict(extensions_dict)
         else:
-            solutions = [
-                f for f in Path(extract_dir).iterdir()
-            ]
-        return solutions
+            extract_path = Path(extract_dir)
+            extensions_dict = defaultdict(list)
+
+            for file_path in extract_path.rglob('*'):
+                if file_path.is_file():
+                    extension = file_path.suffix[1:] if file_path.suffix else 'none'
+                    extensions_dict[extension].append(str(file_path.resolve()))
+
+            for extension in extensions_dict:
+                solutions[extension] = extensions_dict[extension]
+
+        return dict(solutions), checked
 
     @classmethod
     def process_archive(cls, archive_path: str) -> Any:
@@ -156,7 +164,7 @@ class BaseArchiveProcessor(ABC):
         """
         with TemporaryDirectory() as extract_dir:
             try:
-                data = cls._common_extraction(archive_path, extract_dir)
+                data = cls.common_extraction(archive_path, extract_dir)
             except (zipfile.BadZipFile, rarfile.BadRarFile) as e:
                 raise ValueError(f"неверный архив (повреждённый): {str(e)}")
 
@@ -164,7 +172,7 @@ class BaseArchiveProcessor(ABC):
 
     @staticmethod
     @abstractmethod
-    def analyze_files(data: dict | list) -> Any:
+    def analyze_files(data: tuple[dict, bool]) -> Any:
         """метод будет определён в наследующихся процессорах"""
         pass
 
@@ -175,14 +183,15 @@ class CopydetectProcessor(BaseArchiveProcessor):
     токенизирует код файла, сравнивает уникальные пары токенизированных кодов и имен их файлов, возвращает значения совпадения токенов, похожесть, а также предпологаемые части сплагиаченного кода (отмечены SUS_FROM_HERE--> <--TO_HERE)
     """
     @staticmethod
-    def analyze_files(data: dict | list) -> dict:
+    def analyze_files(data: tuple[dict, bool]) -> dict:
         """
         :param data: указывается словарь/список с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return возвращает словарь как результат обработки copydetect'а, где ключи - разделённые имена файлов, а значения - значения совпадения токенов, похожесть, а также сами коды с отмеченными частями предположительно сплагиаченного кода
         """
         report = {}
 
-        if isinstance(data, dict):
+        if data[1]:
+            data = data[0]
             for letter in data:
                 for extension in data[letter]:
                     fingerprints = [(Path(file).name, copydetect.CodeFingerprint(file, 25, 1)) for file in data[letter][extension]]
@@ -194,12 +203,14 @@ class CopydetectProcessor(BaseArchiveProcessor):
             if not report:
                 raise ValueError(f"возникла неожиданная ошибка: {report}")
         else:
-            fingerprints = [(file.name, copydetect.CodeFingerprint(file, 25, 1)) for file in data]
-            for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
-                token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
-                code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
-                code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
-                report[f"{name1}___{name2}"] = (token_overlap, similarities, (code1, code2))
+            data = data[0]
+            for extension in data:
+                fingerprints = [(Path(file).name, copydetect.CodeFingerprint(file, 25, 1)) for file in data[extension]]
+                for (name1, fp1), (name2, fp2) in combinations(fingerprints, 2):
+                    token_overlap, similarities, slices = copydetect.compare_files(fp1, fp2)
+                    code1, _ = copydetect.utils.highlight_overlap(fp1.raw_code, slices[0], "~~SFH~~", "~~SFH~~")
+                    code2, _ = copydetect.utils.highlight_overlap(fp2.raw_code, slices[1], "~~SFH~~", "~~SFH~~")
+                    report[f"{name1}___{name2}"] = (token_overlap, sum(similarities) / len(similarities), (code1, code2))
             if not report:
                 raise ValueError(f"возникла неожиданная ошибка: {report}")
         return report
@@ -216,14 +227,15 @@ class VectorProcessor(BaseArchiveProcessor):
     """
 
     @staticmethod
-    def analyze_files(data: dict | list) -> dict | set[tuple]:
+    def analyze_files(data: tuple[dict, bool]) -> dict | set[tuple]:
         """
         :param data: указывается словарь/список с данными о решениях учеников (заполняется автоматом, см. BaseArchiveProcessor)
         :return: возвращает множество кортежей со значениями "похожести" пар указанных файлов
         """
         result = {}
 
-        if isinstance(data, dict):
+        if data[1]:
+            data = data[0]
             for letter, extensions in data.items():
                 for ext, files in extensions.items():
                     filenames = [Path(fp).name for fp in files]
@@ -235,16 +247,18 @@ class VectorProcessor(BaseArchiveProcessor):
                     tfidf_matrix = TfidfVectorizer().fit_transform(docs).toarray()
 
                     doc_pairs = list(zip(filenames, tfidf_matrix))
-
                     r = list(VectorProcessor._find_plagiarism(doc_pairs))
-
                     for file in r:
                         result[f"{letter}___{ext}___{file[0]}___{file[1]}"] = file[2]
         else:
-            docs = [VectorProcessor._read_file(file) for file in data]
-            transformed_docs = TfidfVectorizer().fit_transform(docs).toarray()
-            doc_pairs = list(zip([path.name for path in data], transformed_docs))
-            result = VectorProcessor._find_plagiarism(doc_pairs)
+            data = data[0]
+            for extension in data:
+                docs = [VectorProcessor._read_file(file) for file in data[extension]]
+                transformed_docs = TfidfVectorizer().fit_transform(docs).toarray()
+                doc_pairs = list(zip([Path(path).name for path in data[extension]], transformed_docs))
+                r = list(VectorProcessor._find_plagiarism(doc_pairs))
+                for file in r:
+                    result[f"{extension}___{file[0]}___{file[1]}"] = file[2]
 
         return result
 
