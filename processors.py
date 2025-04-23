@@ -13,11 +13,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from itertools import combinations
 import matplotlib
-import logging
 from check_archive import check_archive
 matplotlib.use('Agg') # нужен чтобы избавиться от warning
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class BaseArchiveProcessor(ABC):
@@ -75,9 +72,20 @@ class BaseArchiveProcessor(ABC):
                 file_path = Path(file_part)
 
                 extension = file_path.suffix
+
                 if not extension:
-                    extension = '.txt'
-                    extension_clean = 'txt'
+                    if "gcc_cpp" in file_part:
+                        extension = '.cpp'
+                        extension_clean = 'cpp'
+                    elif "pypy" in file_part:
+                        extension = '.py'
+                        extension_clean = 'py'
+                    elif "golang" in file_part:
+                        extension = '.go'
+                        extension_clean = 'go'
+                    else:
+                        extension = '.txt'
+                        extension_clean = 'txt'
                 else:
                     extension_clean = extension.lstrip('.')
 
