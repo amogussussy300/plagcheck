@@ -74,7 +74,7 @@ class BaseArchiveProcessor(ABC):
                 extension = file_path.suffix
 
                 if not extension:
-                    if "gcc_cpp" in file_part:
+                    if "gcc" in file_part:
                         extension = '.cpp'
                         extension_clean = 'cpp'
                     elif "pypy" in file_part:
