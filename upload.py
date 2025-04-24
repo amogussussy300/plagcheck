@@ -80,10 +80,11 @@ def process_archive(query_args, args):
 
     task_id = str(uuid.uuid4())
     new_task = Task(id=task_id, status="processing")
-    db.session.add(new_task)
-    db.session.commit()
-
     app = current_app._get_current_object()
+
+    with app.app_context():
+        db.session.add(new_task)
+        db.session.commit()
 
     # !
     future = executor.submit(
