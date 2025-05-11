@@ -1,0 +1,89 @@
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, msg in messages %}
+            <div class="alert alert-{{ category }} mb-4">
+              {{ msg }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="card shadow">
+        <div class="card-body">
+          <h2 class="card-title mb-4">Вход</h2>
+
+          <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div class="form-group mb-4">
+              {{ form.email.label(class="form-label") }}
+              {{ form.email(class="form-control", placeholder="Введите вашу почту") }}
+              {% if form.email.errors %}
+                <ul class="text-danger mt-2">
+                  {% for error in form.email.errors %}
+                    <li>{{ error }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+
+            <div class="form-group mb-4">
+              {{ form.password.label(class="form-label") }}
+              {{ form.password(class="form-control", placeholder="Введите пароль") }}
+              {% if form.password.errors %}
+                <ul class="text-danger mt-2">
+                  {% for error in form.password.errors %}
+                    <li>{{ error }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+
+            <div class="form-group mb-4">
+              <div class="form-check">
+                {{ form.remember_me(class="form-check-input") }}
+                {{ form.remember_me.label(class="form-check-label") }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              {{ form.submit(class="btn btn-primary w-100 py-2") }}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .card {
+    border-radius: 15px;
+    border: none;
+  }
+
+  .form-control {
+    border-radius: 8px;
+    padding: 12px 15px;
+  }
+
+  .btn-primary {
+    background-color: #6366f1;
+    border: none;
+    padding: 12px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    background-color: #4f46e5;
+    transform: translateY(-1px);
+  }
+
+  .form-check-input {
+    margin-top: 0.3em;
+  }
+</style>
