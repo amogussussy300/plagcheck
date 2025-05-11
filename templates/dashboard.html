@@ -2,33 +2,39 @@
 
 {% block content %}
 <div class="dashboard-container">
-    <div class="dashboard-content">
-        <h2>Добро пожаловать, {{ current_user.username }}!</h2>
+  <div class="dashboard-content">
+    <h2>Добро пожаловать, {{ current_user.username }}!</h2>
 
-        <!-- драг анд дроп -->
-        <div class="drag-drop-zone" id="dropZone">
-            <div class="drop-instructions">
-                <i class="fas fa-cloud-upload-alt fa-3x"></i>
-                <p>Перетащите сюда архив</p>
-                <p>или</p>
-                <button class="btn-browse" onclick="document.getElementById('fileInput').click()">
-                    найти архив
-                </button>
-                <input type="file" id="fileInput" hidden multiple>
-            </div>
-        </div>
-
-        <!-- лист архивов (не доделано) -->
-        <div class="uploaded-files">
-            <h3>Ваши архивы</h3>
-            <div class="file-list" id="fileList">
-                <!-- они сюда добавятся -->
-            </div>
-        </div>
+    <!-- drag n drop -->
+    <div class="drag-drop-zone" id="dropZone">
+      <div class="drop-instructions">
+        <i class="fas fa-cloud-upload-alt fa-3x"></i>
+        <p>Перетащите сюда архив</p>
+        <p>или</p>
+        <button class="btn-browse" onclick="fileInput.click()">
+          найти архив
+        </button>
+        <input type="file" id="fileInput" hidden>
+      </div>
     </div>
+
+    <!-- spinner -->
+    <div id="loading-spinner" style="display:none; text-align:center; margin-top:1em;">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- работа с загруженными архивами (доделать) -->
+    <div class="uploaded-files" id="uploadedFiles" style="display:none; margin-top:2rem;">
+      <h3>Ваши архивы</h3>
+      <div id="taskLinkContainer"></div>
+      </div>
+    </div>
+
+    <!-- контейнер с результатом обработки -->
+    <div id="comparisons" style="display:none; margin-top:2rem;"></div>
+  </div>
 </div>
 
-<!-- стиль для драг анд дроп -->
 <style>
 
     .drag-drop-zone {
@@ -64,71 +70,224 @@
         padding: 1rem;
         margin-top: 1rem;
     }
+
+    #loading-spinner {
+      display: none;
+      text-align: center;
+      margin-top: 1em;
+    }
+
+    .spinner {
+      width: 2rem;
+      height: 2rem;
+      border: 0.3rem solid rgba(0, 0, 0, 0.1);
+      border-top-color: #333;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: auto;
+    }
+
+    @keyframes spin {
+    to { transform: rotate(360deg); }
+    }
+
+    #toggleArrow {
+      display: inline-block;
+      transform-origin: center;
+    }
+
+    #toggleArrow.expanded {
+      transform: rotate(90deg);
+    }
+
+    .task-item {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 10px 0;
+        background: #f8f9fa;
+    }
+
+    .task-id {
+        color: #3498db;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    .task-id:hover {
+        text-decoration: underline;
+    }
+
+    .results-data {
+        display: none;
+        margin-top: 10px;
+        padding: 10px;
+        background: white;
+        border-radius: 5px;
+        white-space: pre-wrap;
+        font-family: monospace;
+    }
+
+    .comparison-pair {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .code-block {
+      flex: 1;
+      background: #f7f7f7;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 1rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    .comparison-meta {
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    .sfh-flag {
+      background-color: #ffe5e5;
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+
 </style>
 
-<!-- js для реализации драг анд дропа -->
 <script>
-    // фукнционал драг анд дропа
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const spinner = document.getElementById('loading-spinner');
+  const uploadedSection = document.getElementById('uploadedFiles');
+  const taskLinkContainer = document.getElementById('taskLinkContainer');
+  const comparisonsContainer = document.getElementById('comparisons');
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, preventDefaults, false);
+  ['dragenter','dragover','dragleave','drop'].forEach(evt => {
+    dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+  });
+  ['dragenter','dragover'].forEach(evt =>
+    dropZone.addEventListener(evt, () => dropZone.classList.add('dragover'))
+  );
+  ['dragleave','drop'].forEach(evt =>
+    dropZone.addEventListener(evt, () => dropZone.classList.remove('dragover'))
+  );
+  dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+  let lastResult = null;
+
+  async function handleFiles(files) {
+    if (!files.length) return;
+
+    spinner.style.display = 'block';
+    uploadedSection.style.display = 'none';
+    comparisonsContainer.style.display = 'none';
+    taskLinkContainer.innerHTML = '';
+
+    const file = files[0];
+    const fd = new FormData();
+    fd.append('archive', file, file.name);
+
+    try {
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      lastResult = data;
+
+      taskLinkContainer.innerHTML = `
+        <div id="taskToggle" style="cursor:pointer; display:inline-flex; align-items:center; gap:0.5rem;">
+          <span id="toggleArrow" style="transition: transform 0.2s;">▶</span>
+          <a href="#" id="taskToggleLink">${data.task_id}_${data.status}</a>
+        </div>
+      `;
+      uploadedSection.style.display = 'block';
+
+      document.getElementById('taskToggle').addEventListener('click', function(evt) {
+        evt.preventDefault();
+        const arrow = document.getElementById('toggleArrow');
+        const isOpen = comparisonsContainer.style.display === 'block';
+
+        comparisonsContainer.style.display = isOpen ? 'none' : 'block';
+
+        arrow.classList.toggle('expanded', !isOpen);
+
+        if (!isOpen && !comparisonsContainer.hasChildNodes()) {
+          renderComparisons(evt);
+        }
+      });
+
+      uploadedSection.style.display = 'block';
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      spinner.style.display = 'none';
+    }
+  }
+
+  function renderComparisons(evt) {
+    evt.preventDefault();
+    if (!lastResult || !lastResult.results) return;
+
+    comparisonsContainer.innerHTML = '';
+    const { copydetect = {}, vector = {} } = lastResult.results;
+
+    Object.entries(copydetect).forEach(([pairKey, cdVals]) => {
+      const [tokens, score, [codeA, codeB]] = cdVals;
+      const vecScore = vector[pairKey] ?? '—';
+
+      const pairDiv = document.createElement('div');
+      pairDiv.classList.add('comparison-pair');
+
+      const leftDiv = document.createElement('div');
+      leftDiv.classList.add('code-block');
+      leftDiv.innerHTML =
+        `<div class="comparison-meta">
+           <strong>${pairKey.split('___')[2].replace(/-/g,' ')}</strong><br>
+           CopyDetect: tokens=${tokens}, score=${score}<br>
+           Vector: ${vecScore}
+         </div>` +
+        `<pre>${highlightSFH(codeA)}</pre>`;
+
+      const rightDiv = document.createElement('div');
+      rightDiv.classList.add('code-block');
+      rightDiv.innerHTML =
+        `<div class="comparison-meta">
+           <strong>${pairKey.split('___')[3].replace(/-/g,' ')}</strong><br>
+           CopyDetect: tokens=${tokens}, score=${score}<br>
+           Vector: ${vecScore}
+         </div>` +
+        `<pre>${highlightSFH(codeB)}</pre>`;
+
+      pairDiv.appendChild(leftDiv);
+      pairDiv.appendChild(rightDiv);
+      comparisonsContainer.appendChild(pairDiv);
     });
 
-    function preventDefaults (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
+    comparisonsContainer.style.display = 'block';
+    comparisonsContainer.scrollIntoView({ behavior: 'smooth' });
+  }
 
-    // подсветка
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
-    });
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
-    });
-
-    function highlight(e) {
-        dropZone.classList.add('dragover');
-    }
-
-    function unhighlight(e) {
-        dropZone.classList.remove('dragover');
-    }
-
-    // работа над файлом (будет заменено)
-    dropZone.addEventListener('drop', handleDrop, false);
-
-    function handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
-    }
-
-    fileInput.addEventListener('change', function(e) {
-        handleFiles(this.files);
-    });
-
-    function handleFiles(files) {
-        // Here you would handle file uploads
-        // This is just a demo of displaying file names
-        const fileList = document.getElementById('fileList');
-
-        Array.from(files).forEach(file => {
-            const fileItem = document.createElement('div');
-            fileItem.className = 'file-item';
-            fileItem.innerHTML = `
-                <i class="fas fa-file"></i>
-                ${file.name} (${Math.round(file.size/1024)} KB)
-            `;
-            fileList.appendChild(fileItem);
-        });
-    }
+  function highlightSFH(code) {
+    const escaped = escapeHtml(code);
+    return escaped.replace(
+      /~~SFH~~(.*?)~~SFH~~/gs,
+      (_, inner) => `<span class="sfh-flag">${inner}</span>`
+    );
+  }
 </script>
 
-<!-- для иконок -->
+<!-- font-awesome -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
 {% endblock %}
