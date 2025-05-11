@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-content">
+        <h2>Добро пожаловать, {{ current_user.username }}!</h2>
+
+        <!-- драг анд дроп -->
+        <div class="drag-drop-zone" id="dropZone">
+            <div class="drop-instructions">
+                <i class="fas fa-cloud-upload-alt fa-3x"></i>
+                <p>Перетащите сюда архив</p>
+                <p>или</p>
+                <button class="btn-browse" onclick="document.getElementById('fileInput').click()">
+                    найти архив
+                </button>
+                <input type="file" id="fileInput" hidden multiple>
+            </div>
+        </div>
+
+        <!-- лист архивов (не доделано) -->
+        <div class="uploaded-files">
+            <h3>Ваши архивы</h3>
+            <div class="file-list" id="fileList">
+                <!-- они сюда добавятся -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- стиль для драг анд дроп -->
+<style>
+
+    .drag-drop-zone {
+        border: 2px dashed #3498db;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        margin: 2rem 0;
+        transition: all 0.3s ease;
+    }
+
+    .drag-drop-zone.dragover {
+        background: #f8f9fa;
+        border-color: #2980b9;
+    }
+
+    .btn-browse {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .uploaded-files {
+        margin-top: 2rem;
+    }
+
+    .file-list {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+</style>
+
+<!-- js для реализации драг анд дропа -->
+<script>
+    // фукнционал драг анд дропа
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // подсветка
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('dragover');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('dragover');
+    }
+
+    // работа над файлом (будет заменено)
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    }
+
+    fileInput.addEventListener('change', function(e) {
+        handleFiles(this.files);
+    });
+
+    function handleFiles(files) {
+        // Here you would handle file uploads
+        // This is just a demo of displaying file names
+        const fileList = document.getElementById('fileList');
+
+        Array.from(files).forEach(file => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `
+                <i class="fas fa-file"></i>
+                ${file.name} (${Math.round(file.size/1024)} KB)
+            `;
+            fileList.appendChild(fileItem);
+        });
+    }
+</script>
+
+<!-- для иконок -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+{% endblock %}

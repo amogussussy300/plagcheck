@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet"
+          href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+          integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+          crossorigin="anonymous">
+    <title>{{title}}</title>
+</head>
+<body>
+<header>
+<nav class="main-nav">
+    <div class="nav-brand">Plagcheck</div>
+    {% if current_user.is_authenticated %}
+    <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}" class="nav-link">Архивы</a>
+    <span class="nav-divider">|</span>
+    <a href="{{ url_for('logout') }}" class="nav-link">Выход</a>
+    </div>
+    {% else %}
+    <div class="nav-links">
+    <a href="{{ url_for('login') }}" class="nav-link">Войти</a>
+    <span class="nav-divider">|</span>
+    <a href="{{ url_for('register') }}" class="nav-link">Регистрация</a>
+    </div>
+    {% endif %}
+</nav>
+<style>
+  .main-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: #f8f9fa;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .nav-link {
+    color: #2d3748;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+  }
+
+  .nav-link:hover {
+    color: #4299e1;
+  }
+
+  .nav-divider {
+    color: #cbd5e0;
+  }
+</style>
+</header>
+<main role="main" class="container">
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>
