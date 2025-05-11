@@ -1,14 +1,26 @@
-from flask import Flask, render_template, url_for, flash, redirect
+import io
+import json
+import os
+
+import requests
+from flask import Flask, render_template, url_for, flash, redirect, jsonify, request
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
+from requests import RequestException
+from werkzeug.utils import secure_filename
+import pathlib
+import tempfile
 from forms import RegistrationForm, LoginForm
 from models import User
 from extensions import db
+from services import send_archive, get_status
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
@@ -81,10 +93,47 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
+
 @app.route('/upload', methods=['POST'])
 @login_required
-def upload_file():
-    pass
+def handle_upload():
+    """потом заполню"""
+    try:
+        if 'archive' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+
+        file = request.files['archive']
+        suffix = pathlib.Path(file.filename).suffix
+        name = file.filename[:10]
+        if file.filename == '':
+            return jsonify({'error': 'Empty filename'}), 400
+
+        try:
+            file_bytes = file.read()
+
+            with tempfile.TemporaryDirectory() as tdir:
+                save_path = os.path.join(tdir, fr"{name}.{suffix}")
+
+                with open(save_path, "wb") as f:
+                    f.write(file_bytes)
+
+                    task_id = json.loads(requests.post("http://localhost:8000/api/archives/",
+                                             files={"file": open(save_path, "rb")},
+                                             params={"process_type": "vector copydetect"}).content)["task_id"]
+
+                    status_response = requests.get(f"http://localhost:8000/api/status/{task_id}")
+                    while status_response.json()["status"] != "completed":
+                        print(status_response.json())
+
+            return status_response.json()
+
+        except RequestException as e:
+            return jsonify({'error': f'ошибка коммуникации с апи: {str(e)}'}), 502
+        except KeyError:
+            return jsonify({'error': 'неверный ответ от апи'}), 502
+
+    except Exception as e:
+        return jsonify({'error': f'внутренняя ошибка сервера: {str(e)}'}), 500
 
 @app.errorhandler(404)
 def not_found(error):
