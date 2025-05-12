@@ -1,5 +1,3 @@
-import io
-import json
 import os
 import uuid
 import requests
@@ -7,7 +5,6 @@ from flask import Flask, render_template, url_for, flash, redirect, jsonify, req
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from requests import RequestException
-from werkzeug.utils import secure_filename
 import pathlib
 import tempfile
 from forms import RegistrationForm, LoginForm
@@ -86,6 +83,7 @@ def login():
 def dashboard():
     archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all()
     archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results} for archive in archives]
+    print(archives_data)
     return render_template('dashboard.html', archives=archives_data)
 
 
