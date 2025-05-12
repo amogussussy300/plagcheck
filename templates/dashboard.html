@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+<!-- это чудо что это "работает" -->
+
 <div class="dashboard-container">
   <div class="dashboard-content">
+
     <h2>Добро пожаловать, {{ current_user.username }}!</h2>
 
     <!-- drag n drop -->
@@ -11,29 +15,37 @@
         <i class="fas fa-cloud-upload-alt fa-3x"></i>
         <p>Перетащите сюда архив</p>
         <p>или</p>
-        <button class="btn-browse" onclick="fileInput.click()">
+        <button class="btn-browse" onclick="document.getElementById('fileInput').click()">
           найти архив
         </button>
         <input type="file" id="fileInput" hidden>
       </div>
     </div>
 
-    <!-- spinner -->
-    <div id="loading-spinner" style="display:none; text-align:center; margin-top:1em;">
-      <div class="spinner"></div>
-    </div>
 
-    <!-- работа с загруженными архивами (доделать) -->
-    <div class="uploaded-files" id="uploadedFiles" style="display:none; margin-top:2rem;">
+    <!-- Работа с загруженными архивами и предыдущими архивами -->
+    <div id="uploadedFiles" class="uploaded-files" style="display: none; margin-top:2rem;">
       <h3>Ваши архивы</h3>
       <div id="taskLinkContainer"></div>
-      </div>
+        <script>
+          document.addEventListener('DOMContentLoaded', () => {
+            {% for archive in archives %}
+              renderTaskLink({{ archive|tojson }});
+            {% endfor %}
+          });
+        </script>
     </div>
 
     <!-- контейнер с результатом обработки -->
     <div id="comparisons" style="display:none; margin-top:2rem;"></div>
+
+    <!-- spinner -->
+    <div id="loading-spinner" style="display:none; text-align:center; margin-top:1em;">
+      <div class="spinner"></div>
+    </div>
   </div>
 </div>
+
 
 <style>
 
@@ -91,12 +103,13 @@
     to { transform: rotate(360deg); }
     }
 
-    #toggleArrow {
-      display: inline-block;
+    .toggle-arrow {
       transform-origin: center;
+      transition: transform 0.2s;
+      display: inline-block;
     }
 
-    #toggleArrow.expanded {
+    .toggleArrow.expanded {
       transform: rotate(90deg);
     }
 
@@ -157,135 +170,165 @@
       padding: 0 2px;
     }
 
+    .toggle-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+    .toggle-arrow {
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+
+    .fileLink {
+    color: #3498db;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .fileResults {
+    margin-top: 1rem;
+    border-left: 3px solid #3498db;
+    padding-left: 1rem;
+  }
+
 </style>
 
-<script>
-  const dropZone = document.getElementById('dropZone');
-  const fileInput = document.getElementById('fileInput');
-  const spinner = document.getElementById('loading-spinner');
-  const uploadedSection = document.getElementById('uploadedFiles');
-  const taskLinkContainer = document.getElementById('taskLinkContainer');
-  const comparisonsContainer = document.getElementById('comparisons');
 
-  ['dragenter','dragover','dragleave','drop'].forEach(evt => {
-    dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
-  });
-  ['dragenter','dragover'].forEach(evt =>
-    dropZone.addEventListener(evt, () => dropZone.classList.add('dragover'))
-  );
-  ['dragleave','drop'].forEach(evt =>
-    dropZone.addEventListener(evt, () => dropZone.classList.remove('dragover'))
-  );
-  dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
-  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+<script>
+
+  const el = {
+    dropZone: document.getElementById('dropZone'),
+    fileInput: document.getElementById('fileInput'),
+    spinner: document.getElementById('loading-spinner'),
+    uploadedSection: document.getElementById('uploadedFiles'),
+    taskLinkContainer: document.getElementById('taskLinkContainer'),
+    comparisons: document.getElementById('comparisons')
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.dropZone.classList.toggle('dragover', ['dragenter', 'dragover'].includes(e.type));
+  };
+
+    if (el.dropZone) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt =>
+        el.dropZone.addEventListener(evt, handleDrag)
+      );
+    }
+  el.dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  el.fileInput.addEventListener('change', () => handleFiles(el.fileInput.files));
 
   let lastResult = null;
 
   async function handleFiles(files) {
     if (!files.length) return;
 
-    spinner.style.display = 'block';
-    uploadedSection.style.display = 'none';
-    comparisonsContainer.style.display = 'none';
-    taskLinkContainer.innerHTML = '';
-
-    const file = files[0];
-    const fd = new FormData();
-    fd.append('archive', file, file.name);
+    el.spinner.style.display = 'block';
+    el.comparisons.style.display = 'none';
 
     try {
-      const res = await fetch('/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      lastResult = data;
+      const formData = new FormData();
+      formData.append('archive', files[0]);
 
-      taskLinkContainer.innerHTML = `
-        <div id="taskToggle" style="cursor:pointer; display:inline-flex; align-items:center; gap:0.5rem;">
-          <span id="toggleArrow" style="transition: transform 0.2s;">▶</span>
-          <a href="#" id="taskToggleLink">${data.task_id}_${data.status}</a>
-        </div>
-      `;
-      uploadedSection.style.display = 'block';
+      const response = await fetch('/upload', { method: 'POST', body: formData });
+      lastResult = await response.json();
 
-      document.getElementById('taskToggle').addEventListener('click', function(evt) {
-        evt.preventDefault();
-        const arrow = document.getElementById('toggleArrow');
-        const isOpen = comparisonsContainer.style.display === 'block';
-
-        comparisonsContainer.style.display = isOpen ? 'none' : 'block';
-
-        arrow.classList.toggle('expanded', !isOpen);
-
-        if (!isOpen && !comparisonsContainer.hasChildNodes()) {
-          renderComparisons(evt);
-        }
-      });
-
-      uploadedSection.style.display = 'block';
-    } catch (err) {
-      console.error('Upload failed:', err);
+      renderTaskLink(lastResult, true);
+      el.uploadedSection.style.display = 'block';
+    } catch (error) {
+      console.error('Upload failed:', error);
     } finally {
-      spinner.style.display = 'none';
+      el.spinner.style.display = 'none';
     }
   }
 
-  function renderComparisons(evt) {
-    evt.preventDefault();
-    if (!lastResult || !lastResult.results) return;
+  function renderTaskLink(data, prepend = false) {
+    const containerId = `taskToggle-${data.task_id}`;
+    const arrowId = `toggleArrow-${data.task_id}`;
 
-    comparisonsContainer.innerHTML = '';
-    const { copydetect = {}, vector = {} } = lastResult.results;
+    const taskDiv = document.createElement('div');
+    taskDiv.className = 'archive-item';
+    taskDiv.innerHTML = `
+      <div class="toggle-container" id="${containerId}">
+        <span class="toggle-arrow" id="${arrowId}">▶</span>
+        <a href="#">${data.task_id}_${data.status}</a>
+      </div>
+      <div class="comparisons" style="display: none;"></div>
+    `;
+
+    if (prepend) {
+      el.taskLinkContainer.insertBefore(taskDiv, el.taskLinkContainer.firstChild);
+      } else {
+        el.taskLinkContainer.appendChild(taskDiv);
+      }
+
+    const toggleContainer = taskDiv.querySelector('.toggle-container');
+    const comparisonsDiv = taskDiv.querySelector('.comparisons');
+
+    toggleContainer.addEventListener('click', (e) => {
+      e.preventDefault();
+      const arrow = e.currentTarget.querySelector('.toggle-arrow');
+      const isOpen = comparisonsDiv.style.display === 'block';
+
+      arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+      comparisonsDiv.style.display = isOpen ? 'none' : 'block';
+
+      if (!isOpen && !comparisonsDiv.innerHTML) {
+        renderComparisons(data, comparisonsDiv);
+      }
+    });
+
+    el.uploadedSection.style.display = 'block';
+  }
+
+  function renderComparisons(data, targetElement) {
+    if (!data?.results) return;
+
+    const { copydetect = {}, vector = {} } = data.results;
+    targetElement.innerHTML = '';
 
     Object.entries(copydetect).forEach(([pairKey, cdVals]) => {
       const [tokens, score, [codeA, codeB]] = cdVals;
+      const [,, fileA, fileB] = pairKey.split('___');
       const vecScore = vector[pairKey] ?? '—';
 
-      const pairDiv = document.createElement('div');
-      pairDiv.classList.add('comparison-pair');
-
-      const leftDiv = document.createElement('div');
-      leftDiv.classList.add('code-block');
-      leftDiv.innerHTML =
-        `<div class="comparison-meta">
-           <strong>${pairKey.split('___')[2].replace(/-/g,' ')}</strong><br>
-           CopyDetect: tokens=${tokens}, score=${score}<br>
-           Vector: ${vecScore}
-         </div>` +
-        `<pre>${highlightSFH(codeA)}</pre>`;
-
-      const rightDiv = document.createElement('div');
-      rightDiv.classList.add('code-block');
-      rightDiv.innerHTML =
-        `<div class="comparison-meta">
-           <strong>${pairKey.split('___')[3].replace(/-/g,' ')}</strong><br>
-           CopyDetect: tokens=${tokens}, score=${score}<br>
-           Vector: ${vecScore}
-         </div>` +
-        `<pre>${highlightSFH(codeB)}</pre>`;
-
-      pairDiv.appendChild(leftDiv);
-      pairDiv.appendChild(rightDiv);
-      comparisonsContainer.appendChild(pairDiv);
+      targetElement.innerHTML += `
+        <div class="comparison-pair">
+          ${createCodeBlock(fileA, tokens, score, vecScore, codeA)}
+          ${createCodeBlock(fileB, tokens, score, vecScore, codeB)}
+        </div>
+      `;
     });
-
-    comparisonsContainer.style.display = 'block';
-    comparisonsContainer.scrollIntoView({ behavior: 'smooth' });
   }
 
-  function escapeHtml(str) {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+
+  function createCodeBlock(filename, tokens, score, vecScore, code) {
+    return `
+      <div class="code-block">
+        <div class="comparison-meta">
+          <strong>${filename.replace(/-/g, ' ')}</strong><br>
+          Copydetect: t=${tokens}, s=${score}<br>
+          Vector: ${vecScore}
+        </div>
+        <pre>${highlightSFH(escapeHtml(code))}</pre>
+      </div>
+    `;
   }
 
-  function highlightSFH(code) {
-    const escaped = escapeHtml(code);
-    return escaped.replace(
-      /~~SFH~~(.*?)~~SFH~~/gs,
-      (_, inner) => `<span class="sfh-flag">${inner}</span>`
-    );
-  }
+  const escapeHtml = str => str.replace(/[&<>]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  const highlightSFH = code => code.replace(
+    /~~SFH~~(.*?)~~SFH~~/gs,
+    (_, match) => `<span class="sfh-flag">${match}</span>`
+  );
+
 </script>
+
+
 
 <!-- font-awesome -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
