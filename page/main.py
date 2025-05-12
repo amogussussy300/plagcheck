@@ -1,9 +1,9 @@
 import io
 import json
 import os
-
+import uuid
 import requests
-from flask import Flask, render_template, url_for, flash, redirect, jsonify, request
+from flask import Flask, render_template, url_for, flash, redirect, jsonify, request, current_app
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
 from requests import RequestException
@@ -11,9 +11,8 @@ from werkzeug.utils import secure_filename
 import pathlib
 import tempfile
 from forms import RegistrationForm, LoginForm
-from models import User
+from models import User, Archive
 from extensions import db
-from services import send_archive, get_status
 
 
 app = Flask(__name__)
@@ -21,6 +20,7 @@ app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['UPLOAD_FOLDER'] = r'uploads/'
 app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
@@ -84,7 +84,9 @@ def login():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all()
+    archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results} for archive in archives]
+    return render_template('dashboard.html', archives=archives_data)
 
 
 @app.route("/logout")
@@ -97,43 +99,60 @@ def logout():
 @app.route('/upload', methods=['POST'])
 @login_required
 def handle_upload():
-    """потом заполню"""
-    try:
-        if 'archive' not in request.files:
-            return jsonify({'error': 'No file uploaded'}), 400
+    if 'archive' not in request.files:
+        return jsonify(error='загруженного архива нет'), 400
 
-        file = request.files['archive']
-        suffix = pathlib.Path(file.filename).suffix
-        name = file.filename[:10]
-        if file.filename == '':
-            return jsonify({'error': 'Empty filename'}), 400
+    file = request.files['archive']
+    if file.filename == '':
+        return jsonify(error='пустое имя архива'), 400
+
+    suffix = pathlib.Path(file.filename).suffix
+    name = f'{str(uuid.uuid4())}'
+
+    file_bytes = file.read()
+
+    with tempfile.TemporaryDirectory() as upload_dir:
+
+        save_path = os.path.join(upload_dir, f"{name}{suffix}")
+
+        with open(save_path, "wb") as f:
+            f.write(file_bytes)
 
         try:
-            file_bytes = file.read()
+            with open(save_path, "rb") as fp:
+                resp = requests.post(
+                    "http://localhost:8000/api/archives/",
+                    files={"file": fp},
+                    params={"process_type": "vector copydetect"},
+                )
 
-            with tempfile.TemporaryDirectory() as tdir:
-                save_path = os.path.join(tdir, fr"{name}.{suffix}")
-
-                with open(save_path, "wb") as f:
-                    f.write(file_bytes)
-
-                    task_id = json.loads(requests.post("http://localhost:8000/api/archives/",
-                                             files={"file": open(save_path, "rb")},
-                                             params={"process_type": "vector copydetect"}).content)["task_id"]
-
-                    status_response = requests.get(f"http://localhost:8000/api/status/{task_id}")
-                    while status_response.json()["status"] != "completed":
-                        print(status_response.json())
-
-            return status_response.json()
-
+            resp.raise_for_status()
+            task_id = resp.json()["task_id"]
         except RequestException as e:
-            return jsonify({'error': f'ошибка коммуникации с апи: {str(e)}'}), 502
+            return jsonify(error=f'ошибка коммуникации с апи: {e}'), 502
         except KeyError:
-            return jsonify({'error': 'неверный ответ от апи'}), 502
+            return jsonify(error='неверный response от апи'), 502
 
-    except Exception as e:
-        return jsonify({'error': f'внутренняя ошибка сервера: {str(e)}'}), 500
+        while True:
+            status_resp = requests.get(f"http://localhost:8000/api/status/{task_id}")
+            status_resp.raise_for_status()
+            status_data = status_resp.json()
+            if status_data.get("status") == "completed":
+                break
+
+    with current_app.app_context():
+        new_arch = Archive(
+            user_id=current_user.id,
+            task_id=status_data['task_id'],
+            status=status_data['status'],
+            comparison_results=status_data['results']
+        )
+
+        db.session.add(new_arch)
+        db.session.commit()
+
+    return jsonify(status_data)
+
 
 @app.errorhandler(404)
 def not_found(error):
