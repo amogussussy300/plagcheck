@@ -7,60 +7,115 @@
           href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
           integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
           crossorigin="anonymous">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <title>{{title}}</title>
 </head>
 <body>
 <header>
-<nav class="main-nav">
-    <div class="nav-brand">Plagcheck</div>
-    {% if current_user.is_authenticated %}
-    <div class="nav-links">
-    <a href="{{ url_for('dashboard') }}" class="nav-link">Архивы</a>
-    <span class="nav-divider">|</span>
-    <a href="{{ url_for('logout') }}" class="nav-link">Выход</a>
-    </div>
-    {% else %}
-    <div class="nav-links">
-    <a href="{{ url_for('login') }}" class="nav-link">Войти</a>
-    <span class="nav-divider">|</span>
-    <a href="{{ url_for('register') }}" class="nav-link">Регистрация</a>
+    <nav class="main-nav">
+        <div class="nav-brand"><a href="{{ url_for('index') }}">Plagcheck</a></div>
+        {% if current_user.is_authenticated %}
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Архивы</a>
+            <span class="nav-divider">|</span>
+            <a href="{{ url_for('logout') }}" class="nav-link">Выход</a>
+        </div>
+        {% else %}
+        <div class="nav-links">
+            <a href="{{ url_for('login') }}" class="nav-link">Войти</a>
+            <span class="nav-divider">|</span>
+            <a href="{{ url_for('register') }}" class="nav-link">Регистрация</a>
+        </div>
+        {% endif %}
+    </nav>
+
+    {% if request.endpoint == 'index' %}
+    <div class="container d-flex justify-content-center align-items-center my-5">
+        <h1 class="text-center display-4">Plagcheck</h1>
     </div>
     {% endif %}
-</nav>
-<style>
-  .main-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 2rem;
-    background: #f8f9fa;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  }
 
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-  }
+    <style>
+        body {
+            background-color: #f0f0f0;
+            margin-bottom: 60px; /* Space for footer */
+        }
+        .main-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: #f8f9fa;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .nav-link {
+            color: #2d3748;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
 
-  .nav-link {
-    color: #2d3748;
-    text-decoration: none;
-    font-weight: 500;
-    transition: color 0.3s ease;
-  }
+        .nav-link:hover {
+            color: #4299e1;
+        }
 
-  .nav-link:hover {
-    color: #4299e1;
-  }
+        .nav-divider {
+            color: #cbd5e0;
+        }
 
-  .nav-divider {
-    color: #cbd5e0;
-  }
-</style>
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 60px;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid #dee2e6;
+        }
+        .footer-icon {
+            font-size: 24px;
+            color: #6c757d;
+            margin: 0 15px;
+            transition: color 0.3s ease;
+        }
+        .footer-icon:hover {
+            color: #4299e1;
+            text-decoration: none;
+        }
+
+        .main-nav {
+            margin-bottom: 3rem;
+        }
+
+    </style>
 </header>
+
 <main role="main" class="container">
     {% block content %}{% endblock %}
 </main>
+
+<footer class="footer">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-auto">
+                <a href="https://github.com/amogussussy300/plagcheck" class="footer-icon">
+                    <i class="fab fa-github"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
 </body>
 </html>

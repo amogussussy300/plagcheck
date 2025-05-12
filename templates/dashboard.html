@@ -193,6 +193,33 @@
     padding-left: 1rem;
   }
 
+    .task-header {
+    cursor: pointer;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin: 8px 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .task-header:hover {
+    background: #eee;
+  }
+
+  .toggle-arrow {
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.2s ease;
+  }
+
+  .task-content {
+    margin-left: 20px;
+    border-left: 2px solid #ddd;
+    padding-left: 12px;
+  }
+
 </style>
 
 
@@ -206,6 +233,8 @@
     taskLinkContainer: document.getElementById('taskLinkContainer'),
     comparisons: document.getElementById('comparisons')
   };
+  const RENDER_CHUNK_SIZE = 15;
+  const YIELD_TIME = 50;
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -284,39 +313,109 @@
     el.uploadedSection.style.display = 'block';
   }
 
-  function renderComparisons(data, targetElement) {
-    if (!data?.results) return;
+async function renderComparisons(data, targetElement) {
+  if (!data?.results) return;
 
-    const { copydetect = {}, vector = {} } = data.results;
-    targetElement.innerHTML = '';
+  const { copydetect = {}, vector = {} } = data.results;
+  targetElement.innerHTML = '<div class="loading-text">обрабатываем блоки сравнения...</div>';
 
-    Object.entries(copydetect).forEach(([pairKey, cdVals]) => {
-      const [tokens, score, [codeA, codeB]] = cdVals;
-      const [,, fileA, fileB] = pairKey.split('___');
-      const vecScore = vector[pairKey] ?? '—';
+  const tasks = {};
+  Object.entries(copydetect).forEach(([pairKey, cdVals]) => {
+    const taskId = pairKey.split('___')[0];
+    tasks[taskId] = tasks[taskId] || [];
+    tasks[taskId].push({ pairKey, cdVals });
+  });
+  const sortedTasks = Object.keys(tasks).sort((a, b) => a.localeCompare(b));
 
-      targetElement.innerHTML += `
-        <div class="comparison-pair">
-          ${createCodeBlock(fileA, tokens, score, vecScore, codeA)}
-          ${createCodeBlock(fileB, tokens, score, vecScore, codeB)}
-        </div>
-      `;
-    });
-  }
+  const fragment = document.createDocumentFragment();
 
+  for (const taskId of sortedTasks) {
+    const taskContainer = document.createElement('div');
+    taskContainer.className = 'task-container';
 
-  function createCodeBlock(filename, tokens, score, vecScore, code) {
-    return `
-      <div class="code-block">
-        <div class="comparison-meta">
-          <strong>${filename.replace(/-/g, ' ')}</strong><br>
-          Copydetect: t=${tokens}, s=${score}<br>
-          Vector: ${vecScore}
-        </div>
-        <pre>${highlightSFH(escapeHtml(code))}</pre>
-      </div>
+    const taskHeader = document.createElement('div');
+    taskHeader.className = 'task-header';
+    taskHeader.innerHTML = `
+      <span class="toggle-arrow">▶</span>
+      Задачка ${taskId}
+      <span class="loading-dots" style="display: none">...</span>
     `;
+
+    const content = document.createElement('div');
+    content.className = 'task-content';
+    content.style.display = 'none';
+
+    let pairs = tasks[taskId];
+    let renderedPairs = 0;
+    let isRendering = false;
+
+    taskHeader.addEventListener('click', async () => {
+      const isOpen = content.style.display === 'block';
+      content.style.display = isOpen ? 'none' : 'block';
+      taskHeader.querySelector('.toggle-arrow').style.transform =
+        isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+
+      if (!isOpen && !content.hasChildNodes()) {
+        const loader = taskHeader.querySelector('.loading-dots');
+        loader.style.display = 'inline';
+        isRendering = true;
+
+        while (renderedPairs < pairs.length) {
+          const chunk = pairs.slice(renderedPairs, renderedPairs + RENDER_CHUNK_SIZE);
+          renderedPairs += chunk.length;
+
+          const chunkFragment = document.createDocumentFragment();
+          chunk.forEach(({ pairKey, cdVals }) => {
+            const [tokens, score, [codeA, codeB]] = cdVals;
+            const [,, fileA, fileB] = pairKey.split('___');
+            const vecScore = vector[pairKey] ?? '—';
+
+            const pair = document.createElement('div');
+            pair.className = 'comparison-pair';
+            pair.innerHTML = `
+              ${createCodeBlock(fileA, tokens, score, vecScore, codeA)}
+              ${createCodeBlock(fileB, tokens, score, vecScore, codeB)}
+            `;
+            chunkFragment.appendChild(pair);
+          });
+
+          content.appendChild(chunkFragment);
+          await new Promise(resolve => setTimeout(resolve, YIELD_TIME));
+        }
+
+        loader.style.display = 'none';
+        isRendering = false;
+      }
+    });
+
+    taskContainer.appendChild(taskHeader);
+    taskContainer.appendChild(content);
+    fragment.appendChild(taskContainer);
+
+    await new Promise(resolve => setTimeout(resolve, YIELD_TIME));
   }
+
+  targetElement.innerHTML = '';
+  targetElement.appendChild(fragment);
+}
+
+
+function createCodeBlock(filename, tokens, score, vecScore, code) {
+  const formattedVec = typeof vecScore === 'number'
+    ? vecScore.toFixed(3)
+    : vecScore;
+
+  return `
+    <div class="code-block">
+      <div class="comparison-meta">
+        <strong>${filename.replace(/[-_]/g, ' ')}</strong><br>
+        Copydetect: t=${tokens}, s=${score.toFixed(3)}<br>
+        Vector: ${formattedVec}
+      </div>
+      <pre>${highlightSFH(escapeHtml(code))}</pre>
+    </div>
+  `;
+}
 
   const escapeHtml = str => str.replace(/[&<>]/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
