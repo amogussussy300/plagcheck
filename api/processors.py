@@ -64,6 +64,7 @@ class BaseArchiveProcessor(ABC):
                 dir_part, file_part = parts
 
                 student_name = "-".join(dir_part.split('-', dir_part.count('-'))[:dir_part.count('-')])
+
                 name_parts = student_name.split()
                 surname = name_parts[0] if len(name_parts) >= 1 else "Unknown"
                 name = name_parts[1] if len(name_parts) >= 2 else "Unknown"
@@ -71,6 +72,9 @@ class BaseArchiveProcessor(ABC):
                 letter = file_part[0]
                 file_path = Path(file_part)
 
+                ident = file_part.split("-")[1]
+                if not ident:
+                    ident = "unidentified"
                 extension = file_path.suffix
 
                 if not extension:
@@ -89,7 +93,7 @@ class BaseArchiveProcessor(ABC):
                 else:
                     extension_clean = extension.lstrip('.')
 
-                new_filename = f"{letter}-{name}_{surname}-OK{extension}"
+                new_filename = f"{letter}-{name}_{surname}_{ident}-OK{extension}"
 
                 target_dir = os.path.join(
                     extract_dir,
@@ -133,7 +137,6 @@ class BaseArchiveProcessor(ABC):
                 raise ValueError(f"формат {suffix} архива не поддерживается")
         except (zipfile.BadZipFile, rarfile.BadRarFile) as e:
             raise ValueError(f"неверный архив (повреждённый): {str(e)}")
-
 
         solutions = {}
         if checked:
