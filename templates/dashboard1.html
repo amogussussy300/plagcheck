@@ -24,16 +24,23 @@
 
 
         <!-- Работа с загруженными архивами и предыдущими архивами -->
-        <div id="uploadedFiles" class="uploaded-files" style="display: none; margin-top:2rem;">
-            <h3>Ваши архивы</h3>
+       <div id="uploadedFiles" class="uploaded-files" style="display: none; margin-top:2rem;">
+            <div class="header-container">
+                <h3>Ваши архивы</h3>
+            </div>
             <div id="taskLinkContainer"></div>
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
-                  {% for archive in archives %}
-                    renderTaskLink({{ archive|tojson }});
-                  {% endfor %}
+                    {% for archive in archives %}
+                        renderTaskLink({{ archive|tojson }});
+                    {% endfor %}
                 });
             </script>
+        </div>
+        <div class="header-container">
+            <a href="/delete" class="icon-link" style="float: right;">
+                <i class="fas fa-trash"></i>
+            </a>
         </div>
 
         <!-- контейнер с результатом обработки -->
