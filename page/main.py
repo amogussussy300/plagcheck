@@ -84,7 +84,7 @@ def dashboard():
     archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all()
     archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results} for archive in archives]
     print(archives_data)
-    return render_template('dashboard.html', archives=archives_data)
+    return render_template('dashboard.html', archives=archives_data, counter=len(archives_data))
 
 
 @app.route("/logout")
@@ -103,6 +103,10 @@ def handle_upload():
     file = request.files['archive']
     if file.filename == '':
         return jsonify(error='пустое имя архива'), 400
+
+    current_count = Archive.query.filter_by(user_id=current_user.id).count()
+    if current_count >= 10:
+        return jsonify({'error': f'Достигнут лимит по числу архивов для пользователя {current_user.id}'}), 400
 
     suffix = pathlib.Path(file.filename).suffix
     name = f'{str(uuid.uuid4())}'
@@ -149,7 +153,27 @@ def handle_upload():
         db.session.add(new_arch)
         db.session.commit()
 
-    return jsonify(status_data)
+    return jsonify({"status_data": status_data, "new_count": len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all())})
+
+
+@app.route('/delete/<task_id>', methods=['DELETE'])
+def delete_archive(task_id):
+    archive = Archive.query.filter_by(task_id=task_id).first()
+
+    if not archive:
+        return jsonify({'error': 'архив не найден'}), 404
+
+    if archive.user_id != current_user.id:
+        return jsonify({'error': 'неверный пользователь'}), 403
+
+    try:
+        db.session.delete(archive)
+        db.session.commit()
+        return jsonify({'success': True, 'new_count': len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all())})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.errorhandler(404)
