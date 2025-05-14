@@ -148,8 +148,8 @@ def handle_upload():
 
         db.session.add(new_arch)
         db.session.commit()
-
-    return jsonify(status_data)
+    arc_ln = archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).count()
+    return jsonify(status_data), render_template('dashboard.html', arch_len=arc_ln)
 
 
 @app.errorhandler(404)
