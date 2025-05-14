@@ -22,10 +22,9 @@
       </div>
     </div>
 
-
     <!-- Работа с загруженными архивами и предыдущими архивами -->
     <div id="uploadedFiles" class="uploaded-files" style="display: none; margin-top:2rem;">
-      <h3>Ваши архивы</h3>
+      <h3>Ваши архивы: <span id="archiveCounter">{{ counter }} / 10</span></h3>
       <div id="taskLinkContainer"></div>
         <script>
           document.addEventListener('DOMContentLoaded', () => {
@@ -107,6 +106,16 @@
       transform-origin: center;
       transition: transform 0.2s;
       display: inline-block;
+    }
+
+    .delete-archive {
+      transform-origin: right;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+
+    .delete-archive:hover {
+      transform: scale(1.2);
     }
 
     .toggleArrow.expanded {
@@ -224,7 +233,6 @@
 
 
 <script>
-
   const el = {
     dropZone: document.getElementById('dropZone'),
     fileInput: document.getElementById('fileInput'),
@@ -233,8 +241,21 @@
     taskLinkContainer: document.getElementById('taskLinkContainer'),
     comparisons: document.getElementById('comparisons')
   };
+
   const RENDER_CHUNK_SIZE = 15;
   const YIELD_TIME = 50;
+  const counterElement = document.getElementById('archiveCounter');
+  var archiveCounter = 0;
+
+
+  document.addEventListener('DOMContentLoaded', () => {
+    archiveCounter = document.querySelectorAll('.archive-item').length;
+    updateCounter();
+  });
+
+  function updateCounter() {
+    counterElement.textContent = `${archiveCounter} / 10`;
+  }
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -242,11 +263,11 @@
     el.dropZone.classList.toggle('dragover', ['dragenter', 'dragover'].includes(e.type));
   };
 
-    if (el.dropZone) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt =>
-        el.dropZone.addEventListener(evt, handleDrag)
-      );
-    }
+  if (el.dropZone) {
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt =>
+      el.dropZone.addEventListener(evt, handleDrag)
+    );
+  }
   el.dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
   el.fileInput.addEventListener('change', () => handleFiles(el.fileInput.files));
 
@@ -254,6 +275,11 @@
 
   async function handleFiles(files) {
     if (!files.length) return;
+
+    if (archiveCounter >= 10) {
+      console.error('Достигнут лимит архивов в 10');
+      return;
+    }
 
     el.spinner.style.display = 'block';
     el.comparisons.style.display = 'none';
@@ -263,20 +289,34 @@
       formData.append('archive', files[0]);
 
       const response = await fetch('/upload', { method: 'POST', body: formData });
-      lastResult = await response.json();
+      const responseData = await response.json();
+      lastResult = responseData.status_data;
+      if (responseData.new_count != null) {
+        archiveCounter = responseData.new_count;
+      }
+
+      updateCounter();
 
       renderTaskLink(lastResult, true);
       el.uploadedSection.style.display = 'block';
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error('Ошибка загрузки:', error);
     } finally {
       el.spinner.style.display = 'none';
     }
   }
 
   function renderTaskLink(data, prepend = false) {
+
+    if (!data?.task_id || !data?.status) {
+      console.error('неверные данные архива:', data);
+      alert("Вы слишком часто отправляли архивы на обработку! Подождите минуту (лимит api - 4 архива в минуту).");
+      return;
+    }
+
     const containerId = `taskToggle-${data.task_id}`;
     const arrowId = `toggleArrow-${data.task_id}`;
+    const deleteId = `delete-${data.task_id}`;
 
     const taskDiv = document.createElement('div');
     taskDiv.className = 'archive-item';
@@ -284,6 +324,9 @@
       <div class="toggle-container" id="${containerId}">
         <span class="toggle-arrow" id="${arrowId}">▶</span>
         <a href="#">${data.task_id}_${data.status}</a>
+        <span class="delete-archive" id="${deleteId}">
+          <i class="fas fa-trash-alt"></i>
+        </span>
       </div>
       <div class="comparisons" style="display: none;"></div>
     `;
@@ -294,8 +337,37 @@
         el.taskLinkContainer.appendChild(taskDiv);
       }
 
+    updateCounter();
+
     const toggleContainer = taskDiv.querySelector('.toggle-container');
     const comparisonsDiv = taskDiv.querySelector('.comparisons');
+
+    const deleteBtn = taskDiv.querySelector(`#${deleteId}`);
+    deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (confirm('Вы точно хотите удалить архив?')) {
+            try {
+                const response = await fetch(`/delete/${data.task_id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        taskDiv.remove();
+                        archiveCounter = result.new_count;
+                        updateCounter();
+
+                        if (!el.taskLinkContainer.children.length) {
+                            el.uploadedSection.style.display = 'none';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Deletion error:', error);
+            }
+        }
+    });
 
     toggleContainer.addEventListener('click', (e) => {
       e.preventDefault();
