@@ -30,6 +30,8 @@ class ArchiveResponseSchema(Schema):
     status = fields.String(required=True, description="статус обработки")
     message = fields.String(description="пояснение")
     results = fields.Dict(description="результат обработки", required=False)
+    archive_name = fields.String(required=True, description="название данного архива")
+    created_at = fields.DateTime(require=True, description="время загрузки архива")
 
 class ProcessArgsSchema(Schema):
     """

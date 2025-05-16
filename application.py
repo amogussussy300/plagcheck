@@ -50,7 +50,6 @@ api.register_blueprint(upload_blp)
 with app.app_context():
     db.create_all()
 
-
 #  запуск
 if __name__ == "__main__":
     app.run(debug=True)
