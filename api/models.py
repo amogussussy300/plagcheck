@@ -9,6 +9,7 @@ class Task(db.Model):
     status = db.Column(db.String(20), default='processing')
     results = db.Column(db.JSON)  # сохраняет результаты обработок
     created_at = db.Column(db.DateTime, default=datetime.now)
+    archive_name = db.Column(db.String(100), default="undefined")
 
     def __repr__(self):
         return f"Task(id={self.id}, status={self.status})"

@@ -67,6 +67,7 @@ def process_archive(query_args, args):
         abort(400, message="архив не загружен")
 
     file = args['file']
+
     if file.filename == '':
         abort(400, message="пустое имя архива")
 
@@ -79,7 +80,7 @@ def process_archive(query_args, args):
     file.save(filepath)
 
     task_id = str(uuid.uuid4())
-    new_task = Task(id=task_id, status="processing")
+    new_task = Task(id=task_id, status="processing", archive_name=filename) ## имя неверное nigga
     app = current_app._get_current_object()
 
     with app.app_context():
@@ -98,7 +99,8 @@ def process_archive(query_args, args):
     return {
         "task_id": task_id,
         "status": "processing",
-        "message": "обработка архива началась"
+        "message": "обработка архива началась",
+        "archive_name": filename,
     }, 202
 
 
@@ -155,5 +157,7 @@ def check_status(task_id):
         "task": task,
         "task_id": task.id,
         "status": task.status,
-        "results": json.loads(task.results) if task.results else None
+        "results": json.loads(task.results) if task.results else None,
+        "archive_name": task.archive_name,
+        "created_at": task.created_at
     }
