@@ -19,9 +19,10 @@ class Archive(db.Model):
     __tablename__ = 'archives'
     id                 = db.Column(db.Integer, primary_key=True)
     user_id            = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    uploaded_at        = db.Column(db.DateTime, default=datetime.datetime.now())
+    created_at         = db.Column(db.String(100), nullable=False)
     task_id            = db.Column(db.String(64), nullable=False)
     status             = db.Column(db.String(20), nullable=False)
+    archive_name = db.Column(db.String, nullable=False)
     comparison_results = db.Column(
         MutableDict.as_mutable(JSON),
         nullable=False
