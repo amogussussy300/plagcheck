@@ -10,10 +10,14 @@ import tempfile
 from forms import RegistrationForm, LoginForm
 from models import User, Archive
 from extensions import db
+from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
+load_dotenv()
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -81,8 +85,8 @@ def login():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all()
-    archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results} for archive in archives]
+    archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.created_at.desc()).all()
+    archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results, "archive_name": archive.archive_name, "created_at": archive.created_at} for archive in archives]
     print(archives_data)
     return render_template('dashboard.html', archives=archives_data, counter=len(archives_data))
 
@@ -147,13 +151,15 @@ def handle_upload():
             user_id=current_user.id,
             task_id=status_data['task_id'],
             status=status_data['status'],
-            comparison_results=status_data['results']
+            comparison_results=status_data['results'],
+            archive_name=status_data['archive_name'],
+            created_at=status_data['created_at']
         )
 
         db.session.add(new_arch)
         db.session.commit()
 
-    return jsonify({"status_data": status_data, "new_count": len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all())})
+    return jsonify({"status_data": status_data, "new_count": len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.created_at.desc()).all())})
 
 
 @app.route('/delete/<task_id>', methods=['DELETE'])
@@ -169,7 +175,7 @@ def delete_archive(task_id):
     try:
         db.session.delete(archive)
         db.session.commit()
-        return jsonify({'success': True, 'new_count': len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.uploaded_at.desc()).all())})
+        return jsonify({'success': True, 'new_count': len(Archive.query.filter_by(user_id=current_user.id).order_by(Archive.created_at.desc()).all())})
 
     except Exception as e:
         db.session.rollback()
