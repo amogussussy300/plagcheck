@@ -329,7 +329,7 @@
 
     // const uploadTime = data.created_at
     const uploadTime = data.created_at ?
-    new Date(data.created_at).toLocaleString('ru-RU', {
+    new Date(data.created_at).toLocaleString(undefined, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -521,25 +521,32 @@ function createCodeBlock(filename, tokens, score, vecScore, code) {
     (_, match) => `<span class="sfh-flag">${match}</span>`
   );
 
-  function formatFileName(filename) {
+  function formatFileName(filename, maxLen = 32) {
 
-    const lastDotIndex = filename.lastIndexOf('.');
-
-    if (lastDotIndex === -1) {
-        return filename.length > 16
-            ? `${filename.slice(0, 13)}...`
-            : filename;
+    filename = filename.slice(0, -40);
+    const lastDot = filename.lastIndexOf('.');
+    if (lastDot === -1) {
+      return filename.length > maxLen
+        ? filename.slice(0, maxLen - 3) + '...'
+        : filename;
     }
 
-    const namePart = filename.slice(0, lastDotIndex);
-    const extension = filename.slice(lastDotIndex + 1);
+    const name = filename.slice(0, lastDot);
+    const ext = filename.slice(lastDot);
+    const extLen = ext.length;
+    const avail = maxLen - extLen;
 
-    if (namePart.length > 16) {
-        return `${namePart.slice(0, 13)}... .${extension}`;
+    if (filename.length <= maxLen) {
+      return filename;
     }
 
-    return filename;
+    if (avail > 4) {
+      return name.slice(0, avail - 3) + '...' + ext;
+    }
+
+    return '...' + ext;
   }
+
 
 
 </script>
