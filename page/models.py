@@ -7,6 +7,9 @@ from sqlalchemy.dialects.sqlite import JSON
 
 
 class User(db.Model, UserMixin):
+    """
+    модель для каждого пользователя
+    """
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
@@ -16,6 +19,9 @@ class User(db.Model, UserMixin):
 
 
 class Archive(db.Model):
+    """
+    модель для каждого архива, привязана к пользователю
+    """
     __tablename__ = 'archives'
     id                 = db.Column(db.Integer, primary_key=True)
     user_id            = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
