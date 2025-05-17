@@ -80,7 +80,7 @@ def process_archive(query_args, args):
     file.save(filepath)
 
     task_id = str(uuid.uuid4())
-    new_task = Task(id=task_id, status="processing", archive_name=filename) ## имя неверное nigga
+    new_task = Task(id=task_id, status="processing", archive_name=filename)
     app = current_app._get_current_object()
 
     with app.app_context():
