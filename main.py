@@ -71,13 +71,13 @@ def login():
 
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+        user = User.query.filter_by(email=form.email.data, username=form.username.data).first()
 
         if user and bcr.check_password_hash(user.password, form.password.data):
             login_user(user, remember=form.remember_me.data)
             return redirect(url_for('dashboard'))
         else:
-            flash('Неверная почта или пароль', 'danger')
+            flash('Неверная почта, логин или пароль', 'danger')
             return redirect(url_for('login'))
 
     return render_template('login.html', form=form)
@@ -87,7 +87,6 @@ def login():
 def dashboard():
     archives = Archive.query.filter_by(user_id=current_user.id).order_by(Archive.created_at.desc()).all()
     archives_data = [{"status": archive.status, "task_id": archive.task_id, "results": archive.comparison_results, "archive_name": archive.archive_name, "created_at": archive.created_at} for archive in archives]
-    print(archives_data)
     return render_template('dashboard.html', archives=archives_data, counter=len(archives_data))
 
 
@@ -105,6 +104,8 @@ def handle_upload():
         return jsonify(error='загруженного архива нет'), 400
 
     file = request.files['archive']
+    true_filename = file.filename
+
     if file.filename == '':
         return jsonify(error='пустое имя архива'), 400
 
@@ -113,7 +114,7 @@ def handle_upload():
         return jsonify({'error': f'Достигнут лимит по числу архивов для пользователя {current_user.id}'}), 400
 
     suffix = pathlib.Path(file.filename).suffix
-    name = f'{str(uuid.uuid4())}'
+    name = f'{true_filename}{str(uuid.uuid4())}'
 
     file_bytes = file.read()
 
