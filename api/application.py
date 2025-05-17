@@ -9,7 +9,9 @@ import logging
 
 
 # сетапим логгер
-logging.basicConfig()
+logging.basicConfig(
+    level=logging.INFO
+)
 logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 
